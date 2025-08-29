@@ -290,7 +290,6 @@ python main.py
 
 ### FPV Racing Drone Configuration
 - **Flight Model**: Omnidirectional movement with hover capability and high-speed forward flight
-- **Maximum Speed**: 90 km/h (25 m/s) with rapid acceleration capability
 - **Maneuverability**: Acrobatic flight capabilities with immediate response to control inputs
 - **Control Response**: Sensitive, direct thrust vectoring with low latency
 - **First-Person View**: Racing drone cockpit with high-refresh stabilized camera
