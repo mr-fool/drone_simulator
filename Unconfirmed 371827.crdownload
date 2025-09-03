@@ -46,132 +46,6 @@ class Vector3:
     y: float
     z: float
     
-    def __add__(self, other):
-        return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
-    
-    def __mul__(self, scalar):
-        return Vector3(self.x * scalar, self.y * scalar, self.z * scalar)
-    
-    def magnitude(self):
-        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
-
-class FPVDrone:
-    def __init__(self, x=0, y=300, z=0, max_speed_kmh=180, max_range_km=5):
-        self.position = Vector3(x, y, z)
-        self.velocity = Vector3(0, 0, 0)
-        self.rotation = Vector3(0, 0, 0)  # pitch, yaw, roll
-        self.size = 25
-        self.crashed = False
-        self.start_position = Vector3(x, y, z)  # For range calculation
-        
-        # User-configurable parameters
-        self.max_speed_kmh = max_speed_kmh
-        self.max_range_km = max_range_km
-        self.max_speed_ms = max_speed_kmh / 3.6  # Convert to m/s for physics
-        self.max_range_m = max_range_km * 1000   # Convert to meters
-        
-        # FPV Racing Drone characteristics
-        self.battery = 100.0
-        self.drag = 0.92  # Air resistance
-        self.gravity = 0.15  # Gravity effect
-        self.thrust_power = 0.5  # High thrust-to-weight ratio
-        self.rotation_speed = 4.0  # Very agile rotation
-        self.flight_ceiling = 500  # High altitude capability
-        
-        # Performance tracking
-        self.max_speed_achieved = 0.0
-        self.total_distance_traveled = 0.0
-        self.previous_position = Vector3(x, y, z)
-
-    def update_physics(self, throttle, yaw, pitch, roll):
-        """Update FPV drone physics with user-configurable limits"""
-        if self.crashed:
-            return
-            
-        # Store previous position for distance tracking
-        self.previous_position = Vector3(self.position.x, self.position.y, self.position.z)
-            
-        # Apply gravity
-        self.velocity.y += self.gravity
-        
-        # Throttle provides direct upward thrust
-        if throttle > 0:
-            thrust_force = throttle * self.thrust_power
-            self.velocity.y -= thrust_force
-            
-        # Apply rotational movements (very responsive for racing)
-        self.rotation.x += pitch * self.rotation_speed  # pitch
-        self.rotation.y = (self.rotation.y + yaw * self.rotation_speed) % 360 
-        self.rotation.z += roll * self.rotation_speed   # roll
-        
-        # Convert rotation to movement (acrobatic capabilities)
-        forward_speed = -pitch * 0.15  # High forward speed capability
-        side_speed = roll * 0.15       # Rapid lateral movement
-        
-        self.velocity.x += side_speed
-        self.velocity.z += forward_speed
-        
-        # Apply drag
-        self.velocity = self.velocity * self.drag
-        
-        # Limit maximum speed to user-configured value
-        speed = self.velocity.magnitude()
-        if speed > self.max_speed_ms:
-            self.velocity = self.velocity * (self.max_speed_ms / speed)
-            
-        # Update position
-        self.position = self.position + self.velocity
-        
-        # Track performance metrics
-        current_speed_kmh = self.get_speed_kmh()
-        if current_speed_kmh > self.max_speed_achieved:
-            self.max_speed_achieved = current_speed_kmh
-            
-        # Calculate distance traveled this frame
-        distance_delta = math.sqrt((self.position.x - self.previous_position.x)**2 + 
-                                 (self.position.y - self.previous_position.y)**2 + 
-                                 (self.position.z - self.previous_position.z)**2)
-        self.total_distance_traveled += distance_delta
-        
-        # Battery consumption (scales with speed and power usage)
-        base_power_usage = (abs(emg_signals[0]) + abs(emg_signals[1]) + 
-                           abs(emg_signals[2]) + abs(emg_signals[3])) * 0.008
-        # Additional power consumption at high speeds
-        speed_power = (speed / self.max_speed_ms) * 0.012
-        self.battery = max(0, self.battery - base_power_usage - speed_power)
-        
-        # Check range limit
-        distance_from_start = math.sqrt((self.position.x - self.start_position.x)**2 + 
-                                      (self.position.y - self.start_position.y)**2 + 
-                                      (self.position.z - self.start_position.z)**2)
-        
-        if distance_from_start > self.max_range_m:
-            # Force return to within range (simulates range limitation)
-            direction_to_start = Vector3(
-                self.start_position.x - self.position.x,
-                self.start_position.y - self.position.y, 
-                self.start_position.z - self.position.z
-            )
-            direction_length = direction_to_start.magnitude()
-            if direction_length > 0:
-                # Normalize and scale to bring back within range
-                direction_normalized = direction_to_start * (1.0 / direction_length)
-                # Push back towards start position
-                self.position = self.position + (direction_normalized * 2.0)
-        
-        # Ground collision
-        if self.position.y > 580:
-            self.position.y = 580
-            self.crashed = True
-            
-        # Flight ceiling
-        if self.position.y < (300 - self.flight_ceiling):
-            self.position.y = 300 - self.flight_ceiling
-            
-        # Boundary limits
-        self.position.x = max(-400, min(1200, self.position.x))
-        self.position.z = max(-400, min(400, self.position.z))
-    
     def get_speed_kmh(self):
         """Get current speed in km/h"""
         speed_ms = self.velocity.magnitude()
@@ -582,20 +456,33 @@ class FPVSimulator:
                     pygame.draw.circle(self.screen, self.WHITE, pos_2d, target.radius, 2)
     
     def draw_hud(self):
-        """Draw advanced FPV HUD system"""
+        """Draw advanced FPV HUD system with dynamic mission data"""
         # Calculate dynamic mission data
         targets_remaining = len([t for t in self.current_scenario.targets if not t.collected])
         elapsed_time = time.time() - self.current_scenario.start_time
         time_left = max(0, self.current_scenario.time_limit - elapsed_time)
         
-        # Add mission data to the HUD system
-        self.hud_system.mission_data = {
+        # Create enhanced drone data with mission info
+        drone_data = {
+            'heading': self.drone.rotation.y % 360,
+            'pitch': self.drone.rotation.x,
+            'roll': self.drone.rotation.z,
+            'speed': self.drone.get_speed_kmh(),
+            'max_speed': self.drone.max_speed_kmh,
+            'altitude': max(0, 600 - self.drone.position.y),
+            'battery': self.drone.battery,
+            'voltage': 3.7 * (self.drone.battery / 100),
+            'range': self.drone.get_range_from_start_km(),
+            'max_range': self.drone.max_range_km,
+            'flight_mode': 'FPV' if not self.drone.crashed else 'CRASH',
+            'armed': not self.drone.crashed,
+            'mission_name': self.current_scenario.name,
             'targets_remaining': targets_remaining,
-            'time_left': time_left,
-            'mission_name': self.current_scenario.name
+            'time_left': time_left
         }
         
-        integrate_hud_with_drone(self.drone, self.hud_system, self.screen)
+        # Draw the complete HUD
+        self.hud_system.draw_complete_hud(self.screen, drone_data)
     
     def run(self):
         """Main game loop for FPV simulator with configuration"""
@@ -694,4 +581,133 @@ class FPVSimulator:
 
 if __name__ == "__main__":
     simulator = FPVSimulator()
-    simulator.run()
+    simulator.run() __add__(self, other):
+        return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
+    
+    def __mul__(self, scalar):
+        return Vector3(self.x * scalar, self.y * scalar, self.z * scalar)
+    
+    def magnitude(self):
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+
+class FPVDrone:
+    def __init__(self, x=0, y=300, z=0, max_speed_kmh=180, max_range_km=5):
+        self.position = Vector3(x, y, z)
+        self.velocity = Vector3(0, 0, 0)
+        self.rotation = Vector3(0, 0, 0)  # pitch, yaw, roll
+        self.size = 25
+        self.crashed = False
+        self.start_position = Vector3(x, y, z)  # For range calculation
+        
+        # User-configurable parameters
+        self.max_speed_kmh = max_speed_kmh
+        self.max_range_km = max_range_km
+        self.max_speed_ms = max_speed_kmh / 3.6  # Convert to m/s for physics
+        self.max_range_m = max_range_km * 1000   # Convert to meters
+        
+        # FPV Racing Drone characteristics
+        self.battery = 100.0
+        self.drag = 0.92  # Air resistance
+        self.gravity = 0.15  # Gravity effect
+        self.thrust_power = 0.5  # High thrust-to-weight ratio
+        self.rotation_speed = 4.0  # Very agile rotation
+        self.flight_ceiling = 500  # High altitude capability
+        
+        # Performance tracking
+        self.max_speed_achieved = 0.0
+        self.total_distance_traveled = 0.0
+        self.previous_position = Vector3(x, y, z)
+
+    def update_physics(self, throttle, yaw, pitch, roll):
+        """Update FPV drone physics with user-configurable limits"""
+        if self.crashed:
+            return
+            
+        # Store previous position for distance tracking
+        self.previous_position = Vector3(self.position.x, self.position.y, self.position.z)
+            
+        # Apply gravity
+        self.velocity.y += self.gravity
+        
+        # Throttle provides direct upward thrust
+        if throttle > 0:
+            thrust_force = throttle * self.thrust_power
+            self.velocity.y -= thrust_force
+            
+        # Apply rotational movements (very responsive for racing)
+        self.rotation.x += pitch * self.rotation_speed  # pitch
+        self.rotation.y = (self.rotation.y + yaw * self.rotation_speed) % 360  # yaw (heading)
+        self.rotation.z += roll * self.rotation_speed   # roll
+        
+        # Convert rotation to movement (acrobatic capabilities)
+        # Use yaw for directional movement
+        heading_rad = math.radians(self.rotation.y)
+        forward_speed = -pitch * 0.15  # High forward speed capability
+        side_speed = roll * 0.15       # Rapid lateral movement
+        
+        # Apply movement relative to drone's heading
+        self.velocity.x += math.sin(heading_rad) * forward_speed + math.cos(heading_rad) * side_speed
+        self.velocity.z += math.cos(heading_rad) * forward_speed - math.sin(heading_rad) * side_speed
+        
+        # Apply drag
+        self.velocity = self.velocity * self.drag
+        
+        # Limit maximum speed to user-configured value
+        speed = self.velocity.magnitude()
+        if speed > self.max_speed_ms:
+            self.velocity = self.velocity * (self.max_speed_ms / speed)
+            
+        # Update position
+        self.position = self.position + self.velocity
+        
+        # Track performance metrics
+        current_speed_kmh = self.get_speed_kmh()
+        if current_speed_kmh > self.max_speed_achieved:
+            self.max_speed_achieved = current_speed_kmh
+            
+        # Calculate distance traveled this frame
+        distance_delta = math.sqrt((self.position.x - self.previous_position.x)**2 + 
+                                 (self.position.y - self.previous_position.y)**2 + 
+                                 (self.position.z - self.previous_position.z)**2)
+        self.total_distance_traveled += distance_delta
+        
+        # Battery consumption (scales with speed and power usage)
+        base_power_usage = (abs(emg_signals[0]) + abs(emg_signals[1]) + 
+                           abs(emg_signals[2]) + abs(emg_signals[3])) * 0.008
+        # Additional power consumption at high speeds
+        speed_power = (speed / self.max_speed_ms) * 0.012
+        self.battery = max(0, self.battery - base_power_usage - speed_power)
+        
+        # Check range limit
+        distance_from_start = math.sqrt((self.position.x - self.start_position.x)**2 + 
+                                      (self.position.y - self.start_position.y)**2 + 
+                                      (self.position.z - self.start_position.z)**2)
+        
+        if distance_from_start > self.max_range_m:
+            # Force return to within range (simulates range limitation)
+            direction_to_start = Vector3(
+                self.start_position.x - self.position.x,
+                self.start_position.y - self.position.y, 
+                self.start_position.z - self.position.z
+            )
+            direction_length = direction_to_start.magnitude()
+            if direction_length > 0:
+                # Normalize and scale to bring back within range
+                direction_normalized = direction_to_start * (1.0 / direction_length)
+                # Push back towards start position
+                self.position = self.position + (direction_normalized * 2.0)
+        
+        # Ground collision
+        if self.position.y > 580:
+            self.position.y = 580
+            self.crashed = True
+            
+        # Flight ceiling
+        if self.position.y < (300 - self.flight_ceiling):
+            self.position.y = 300 - self.flight_ceiling
+            
+        # Boundary limits
+        self.position.x = max(-400, min(1200, self.position.x))
+        self.position.z = max(-400, min(400, self.position.z))
+    
+    def
