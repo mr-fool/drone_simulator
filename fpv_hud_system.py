@@ -25,11 +25,11 @@ class FPVHUDSystem:
         self.font_small = pygame.font.Font(None, 24)
         self.font_tiny = pygame.font.Font(None, 18)
         
-        # HUD element positions
+        # HUD element positions - MOVED ATTITUDE INDICATOR RIGHT
         self.compass_center = (screen_width // 2, 80)
         self.compass_radius = 60
         
-        self.attitude_center = (100, screen_height // 2)
+        self.attitude_center = (150, screen_height // 2)  # Moved from 100 to 150
         self.attitude_size = 120
         
         self.speed_pos = (50, 150)
@@ -38,14 +38,14 @@ class FPVHUDSystem:
         self.range_pos = (screen_width - 200, 50)
         
     def draw_compass(self, screen, heading):
-        """Draw interactive compass with heading"""
+        """Draw compass that rotates with heading"""
         center_x, center_y = self.compass_center
         
         # Outer compass ring
         pygame.draw.circle(screen, self.WHITE, (center_x, center_y), self.compass_radius, 3)
         pygame.draw.circle(screen, self.BLACK, (center_x, center_y), self.compass_radius - 3, 0)
         
-        # Cardinal directions
+        # Cardinal directions - rotate with heading
         directions = [
             (0, "N", self.RED),
             (90, "E", self.WHITE), 
@@ -54,7 +54,7 @@ class FPVHUDSystem:
         ]
         
         for angle, label, color in directions:
-            # Calculate position for direction markers
+            # Calculate rotated position
             marker_angle = math.radians(angle - heading)
             marker_x = center_x + math.sin(marker_angle) * (self.compass_radius - 15)
             marker_y = center_y - math.cos(marker_angle) * (self.compass_radius - 15)
@@ -67,52 +67,77 @@ class FPVHUDSystem:
         # Center dot
         pygame.draw.circle(screen, self.WHITE, (center_x, center_y), 3)
         
-        # Heading text - ensure heading is properly formatted
-        heading_text = self.font_medium.render(f"{int(heading):03d}°", True, self.YELLOW)
+        # Heading text
+        heading_value = int(heading) % 360
+        heading_text = self.font_medium.render(f"{heading_value:03d}°", True, self.YELLOW)
         heading_rect = heading_text.get_rect(center=(center_x, center_y + self.compass_radius + 20))
         screen.blit(heading_text, heading_rect)
-        
+
     def draw_artificial_horizon(self, screen, pitch, roll):
-        """Draw artificial horizon/attitude indicator - FIXED VERSION"""
+        """Draw artificial horizon - shows actual drone orientation with proper circular clipping"""
         center_x, center_y = self.attitude_center
         size = self.attitude_size
         
-        # Create a surface for the horizon to avoid rendering artifacts
+        # Create a surface for the horizon
         horizon_surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-        horizon_center = (size, size)
         
-        # Draw sky (top half) - using filled circle instead of arc
-        pygame.draw.circle(horizon_surface, self.BLUE, horizon_center, size, 0)
+        # Fill entire surface with sky blue
+        pygame.draw.circle(horizon_surface, self.BLUE, (size, size), size)
         
-        # Draw ground (bottom half) - create polygon for bottom half
-        ground_points = []
-        for angle in range(180, 361):  # Bottom semicircle
-            x = horizon_center[0] + math.cos(math.radians(angle)) * size
-            y = horizon_center[1] + math.sin(math.radians(angle)) * size
-            ground_points.append((x, y))
+        # Calculate horizon line position based on pitch
+        horizon_y = size - (pitch * 3)  # Negative because up pitch should show more sky
         
-        if len(ground_points) > 2:
-            pygame.draw.polygon(horizon_surface, (139, 69, 19), ground_points)
+        # Draw ground portion below horizon line - but only within the circle
+        for x in range(size * 2):
+            for y in range(int(horizon_y), size * 2):
+                # Check if this pixel is within the circle
+                dist = math.sqrt((x - size) ** 2 + (y - size) ** 2)
+                if dist <= size:
+                    horizon_surface.set_at((x, y), (139, 69, 19))  # Ground color
         
         # Draw horizon line
-        horizon_y = horizon_center[1] + pitch * 2  # Apply pitch offset
-        pygame.draw.line(horizon_surface, self.WHITE, 
-                        (horizon_center[0] - size//2, horizon_y), 
-                        (horizon_center[0] + size//2, horizon_y), 3)
+        pygame.draw.line(horizon_surface, self.WHITE, (0, horizon_y), (size * 2, horizon_y), 3)
         
-        # Apply roll rotation to the entire horizon surface
-        if abs(roll) > 0.1:  # Only rotate if significant roll
-            rotated_surface = pygame.transform.rotate(horizon_surface, -roll)
-            rotated_rect = rotated_surface.get_rect(center=(center_x, center_y))
-            screen.blit(rotated_surface, rotated_rect)
+        # Apply roll rotation to the entire horizon
+        if abs(roll) > 0.1:
+            # Rotate the horizon surface
+            rotated_surface = pygame.transform.rotate(horizon_surface, roll)
+            
+            # Get the center of the rotated surface
+            rotated_rect = rotated_surface.get_rect()
+            
+            # Calculate offset to center the rotated surface
+            offset_x = center_x - rotated_rect.width // 2
+            offset_y = center_y - rotated_rect.height // 2
+            
+            # Create a clipping mask to ensure we only draw within the original circle
+            temp_surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+            
+            # Extract only the circular portion from the rotated surface
+            for x in range(size * 2):
+                for y in range(size * 2):
+                    # Check if this pixel should be within our target circle
+                    dist = math.sqrt((x - size) ** 2 + (y - size) ** 2)
+                    if dist <= size:
+                        # Calculate where this pixel comes from in the rotated surface
+                        src_x = x + (rotated_rect.width // 2 - size)
+                        src_y = y + (rotated_rect.height // 2 - size)
+                        
+                        if (0 <= src_x < rotated_surface.get_width() and 
+                            0 <= src_y < rotated_surface.get_height()):
+                            pixel_color = rotated_surface.get_at((src_x, src_y))
+                            temp_surface.set_at((x, y), pixel_color)
+            
+            # Blit the clipped surface
+            screen.blit(temp_surface, (center_x - size, center_y - size))
         else:
-            horizon_rect = horizon_surface.get_rect(center=(center_x, center_y))
-            screen.blit(horizon_surface, horizon_rect)
+            # No rotation - blit directly
+            screen.blit(horizon_surface, (center_x - size, center_y - size))
         
-        # Draw frame and aircraft symbol on top (not rotated)
+        # Draw white circle frame
         pygame.draw.circle(screen, self.WHITE, (center_x, center_y), size, 3)
         
-        # Aircraft symbol (fixed in center)
+        # Aircraft symbol (fixed in center - represents your drone)
         pygame.draw.line(screen, self.YELLOW, (center_x - 20, center_y), (center_x + 20, center_y), 4)
         pygame.draw.line(screen, self.YELLOW, (center_x, center_y - 5), (center_x, center_y + 5), 4)
         
@@ -127,7 +152,7 @@ class FPVHUDSystem:
         pygame.draw.rect(screen, self.WHITE, (x, y, tape_width, tape_height), 2)
         
         # Speed markings
-        speed_range = 100  # Show ±50 km/h around current speed
+        speed_range = 100
         center_y = y + tape_height // 2
         
         for speed in range(max(0, int(current_speed) - speed_range//2), 
@@ -135,7 +160,6 @@ class FPVHUDSystem:
             mark_y = center_y - (speed - current_speed) * 2
             
             if y <= mark_y <= y + tape_height:
-                # Major speed lines
                 if speed % 20 == 0:
                     pygame.draw.line(screen, self.WHITE, (x + tape_width - 15, mark_y), (x + tape_width, mark_y), 2)
                     speed_text = self.font_tiny.render(str(speed), True, self.WHITE)
@@ -168,7 +192,7 @@ class FPVHUDSystem:
         pygame.draw.rect(screen, self.WHITE, (x, y, tape_width, tape_height), 2)
         
         # Altitude markings
-        altitude_range = 200  # Show ±100m around current altitude
+        altitude_range = 200
         center_y = y + tape_height // 2
         
         for alt in range(max(0, int(altitude) - altitude_range//2), 
@@ -176,7 +200,6 @@ class FPVHUDSystem:
             mark_y = center_y + (alt - altitude) * 1
             
             if y <= mark_y <= y + tape_height:
-                # Major altitude lines
                 if alt % 50 == 0:
                     pygame.draw.line(screen, self.WHITE, (x, mark_y), (x + 15, mark_y), 2)
                     alt_text = self.font_tiny.render(str(alt), True, self.WHITE)
@@ -199,10 +222,8 @@ class FPVHUDSystem:
         screen.blit(alt_text, (alt_bg.x + 5, alt_bg.y + 5))
         
     def draw_battery_indicator(self, screen, battery_percentage, voltage=None):
-        """Draw battery status with voltage"""
+        """Draw battery status"""
         x, y = self.battery_pos
-        
-        # Battery outline
         battery_width = 60
         battery_height = 20
         
@@ -220,30 +241,25 @@ class FPVHUDSystem:
         battery_text = self.font_small.render(f"{battery_percentage:.0f}%", True, self.WHITE)
         screen.blit(battery_text, (x, y + battery_height + 5))
         
-        # Voltage display (if provided)
         if voltage:
             voltage_text = self.font_tiny.render(f"{voltage:.1f}V", True, self.GRAY)
             screen.blit(voltage_text, (x, y + battery_height + 25))
         
     def draw_range_indicator(self, screen, current_range, max_range):
-        """Draw range from home indicator"""
+        """Draw range indicator"""
         x, y = self.range_pos
-        
-        # Range circle indicator
         circle_radius = 30
         pygame.draw.circle(screen, self.WHITE, (x, y), circle_radius, 2)
         
-        # Range fill (shows percentage of max range used)
+        # Range fill
         range_percentage = min(current_range / max_range, 1.0)
         fill_angle = range_percentage * 360
         
-        # Draw range arc
         if range_percentage > 0:
             arc_color = self.GREEN if range_percentage < 0.7 else self.YELLOW if range_percentage < 0.9 else self.RED
             
-            # Draw arc segments
             for angle in range(0, int(fill_angle), 2):
-                angle_rad = math.radians(angle - 90)  # Start from top
+                angle_rad = math.radians(angle - 90)
                 start_x = x + math.cos(angle_rad) * (circle_radius - 5)
                 start_y = y + math.sin(angle_rad) * (circle_radius - 5)
                 end_x = x + math.cos(angle_rad) * circle_radius
@@ -255,12 +271,11 @@ class FPVHUDSystem:
         range_rect = range_text.get_rect(center=(x, y))
         screen.blit(range_text, range_rect)
         
-        # Max range text
         max_text = self.font_tiny.render(f"/{max_range:.0f}km", True, self.GRAY)
         screen.blit(max_text, (x - 25, y + circle_radius + 10))
         
     def draw_crosshair(self, screen):
-        """Draw center crosshair for FPV targeting"""
+        """Draw center crosshair"""
         center_x = self.screen_width // 2
         center_y = self.screen_height // 2
         
@@ -281,10 +296,10 @@ class FPVHUDSystem:
         bracket_distance = 50
         
         corners = [
-            (center_x - bracket_distance, center_y - bracket_distance),  # Top-left
-            (center_x + bracket_distance, center_y - bracket_distance),  # Top-right
-            (center_x - bracket_distance, center_y + bracket_distance),  # Bottom-left
-            (center_x + bracket_distance, center_y + bracket_distance)   # Bottom-right
+            (center_x - bracket_distance, center_y - bracket_distance),
+            (center_x + bracket_distance, center_y - bracket_distance),
+            (center_x - bracket_distance, center_y + bracket_distance),
+            (center_x + bracket_distance, center_y + bracket_distance)
         ]
         
         for i, (corner_x, corner_y) in enumerate(corners):
@@ -306,12 +321,10 @@ class FPVHUDSystem:
         x = self.screen_width // 2 - 100
         y = self.screen_height - 60
         
-        # Flight mode
         mode_color = self.GREEN if armed_status else self.YELLOW
         mode_text = self.font_medium.render(f"MODE: {flight_mode}", True, mode_color)
         screen.blit(mode_text, (x, y))
         
-        # Armed status
         armed_text = "ARMED" if armed_status else "DISARMED"
         armed_color = self.RED if armed_status else self.GRAY
         armed_display = self.font_small.render(armed_text, True, armed_color)
@@ -322,22 +335,18 @@ class FPVHUDSystem:
         x = 20
         y = self.screen_height - 120
         
-        # Mission name
         mission_text = self.font_medium.render(f"Mission: {mission_name}", True, self.WHITE)
         screen.blit(mission_text, (x, y))
         
-        # Targets remaining
         targets_text = self.font_small.render(f"Checkpoints: {targets_remaining}", True, self.WHITE)
         screen.blit(targets_text, (x, y + 25))
         
-        # Time remaining
         time_color = self.RED if time_left < 10 else self.WHITE
         time_text = self.font_small.render(f"Time: {time_left:.1f}s", True, time_color)
         screen.blit(time_text, (x, y + 45))
     
     def draw_complete_hud(self, screen, drone_data):
-        """Draw complete HUD with all elements"""
-        # Extract drone data
+        """Draw complete HUD"""
         heading = drone_data.get('heading', 0)
         pitch = drone_data.get('pitch', 0)
         roll = drone_data.get('roll', 0)
@@ -366,13 +375,7 @@ class FPVHUDSystem:
         self.draw_mission_info(screen, mission_name, targets_remaining, time_left)
 
 def integrate_hud_with_drone(drone, hud_system, screen):
-    """Integration function to connect HUD with drone data"""
-    
-    # Get scenario data from the simulator (we need to pass this from main.py)
-    # For now, use default values
-    import time
-    
-    # Prepare drone data for HUD
+    """Integration function"""
     drone_data = {
         'heading': drone.rotation.y % 360,
         'pitch': drone.rotation.x,
@@ -387,9 +390,8 @@ def integrate_hud_with_drone(drone, hud_system, screen):
         'flight_mode': 'FPV' if not drone.crashed else 'CRASH',
         'armed': not drone.crashed,
         'mission_name': 'High-Speed Racing',
-        'targets_remaining': 6,  # Will be dynamic once connected properly
-        'time_left': 90.0  # Will be dynamic once connected properly
+        'targets_remaining': 6,
+        'time_left': 90.0
     }
     
-    # Draw the complete HUD
     hud_system.draw_complete_hud(screen, drone_data)

@@ -101,15 +101,18 @@ class FPVDrone:
             
         # Apply rotational movements (very responsive for racing)
         self.rotation.x += pitch * self.rotation_speed  # pitch
-        self.rotation.y = (self.rotation.y + yaw * self.rotation_speed) % 360 
+        self.rotation.y = (self.rotation.y + yaw * self.rotation_speed) % 360  # yaw (heading)
         self.rotation.z += roll * self.rotation_speed   # roll
         
         # Convert rotation to movement (acrobatic capabilities)
+        # Use yaw for directional movement
+        heading_rad = math.radians(self.rotation.y)
         forward_speed = -pitch * 0.15  # High forward speed capability
         side_speed = roll * 0.15       # Rapid lateral movement
         
-        self.velocity.x += side_speed
-        self.velocity.z += forward_speed
+        # Apply movement relative to drone's heading
+        self.velocity.x += math.sin(heading_rad) * forward_speed + math.cos(heading_rad) * side_speed
+        self.velocity.z += math.cos(heading_rad) * forward_speed - math.sin(heading_rad) * side_speed
         
         # Apply drag
         self.velocity = self.velocity * self.drag
@@ -378,8 +381,8 @@ class FPVSimulator:
             desc_text = self.font_small.render(desc, True, self.GRAY)
             self.screen.blit(desc_text, (70, y_pos + 20))
         
-        # Current Configuration Display
-        current_config_y = 600
+        # Current Configuration Display - moved down to avoid overlap
+        current_config_y = 650
         config_display = self.font_medium.render("Current Configuration:", True, self.YELLOW)
         self.screen.blit(config_display, (50, current_config_y))
         
@@ -389,17 +392,17 @@ class FPVSimulator:
         range_display = self.font_small.render(f"Max Range: {self.max_range_km} km", True, self.WHITE)
         self.screen.blit(range_display, (70, current_config_y + 50))
         
-        # Start button
+        # Start button - moved down
         start_text = self.font_medium.render("Press ENTER to Start Flight Simulation", True, self.GREEN)
-        start_rect = start_text.get_rect(center=(self.WIDTH//2, 720))
+        start_rect = start_text.get_rect(center=(self.WIDTH//2, 740))
         self.screen.blit(start_text, start_rect)
         
-        # Control mode indicator
+        # Control mode indicator - moved down
         control_info = self.font_small.render(
             f"Control Mode: {'EMG Hardware' if ARDUINO_MODE else 'Keyboard (WASD + Space + QE)'}", 
             True, self.GRAY
         )
-        control_rect = control_info.get_rect(center=(self.WIDTH//2, 750))
+        control_rect = control_info.get_rect(center=(self.WIDTH//2, 770))
         self.screen.blit(control_info, control_rect)
         
     def handle_configuration_input(self, key):
@@ -582,20 +585,33 @@ class FPVSimulator:
                     pygame.draw.circle(self.screen, self.WHITE, pos_2d, target.radius, 2)
     
     def draw_hud(self):
-        """Draw advanced FPV HUD system"""
+        """Draw advanced FPV HUD system with dynamic mission data"""
         # Calculate dynamic mission data
         targets_remaining = len([t for t in self.current_scenario.targets if not t.collected])
         elapsed_time = time.time() - self.current_scenario.start_time
         time_left = max(0, self.current_scenario.time_limit - elapsed_time)
         
-        # Add mission data to the HUD system
-        self.hud_system.mission_data = {
+        # Create enhanced drone data with mission info
+        drone_data = {
+            'heading': self.drone.rotation.y % 360,
+            'pitch': self.drone.rotation.x,
+            'roll': self.drone.rotation.z,
+            'speed': self.drone.get_speed_kmh(),
+            'max_speed': self.drone.max_speed_kmh,
+            'altitude': max(0, 600 - self.drone.position.y),
+            'battery': self.drone.battery,
+            'voltage': 3.7 * (self.drone.battery / 100),
+            'range': self.drone.get_range_from_start_km(),
+            'max_range': self.drone.max_range_km,
+            'flight_mode': 'FPV' if not self.drone.crashed else 'CRASH',
+            'armed': not self.drone.crashed,
+            'mission_name': self.current_scenario.name,
             'targets_remaining': targets_remaining,
-            'time_left': time_left,
-            'mission_name': self.current_scenario.name
+            'time_left': time_left
         }
         
-        integrate_hud_with_drone(self.drone, self.hud_system, self.screen)
+        # Draw the complete HUD
+        self.hud_system.draw_complete_hud(self.screen, drone_data)
     
     def run(self):
         """Main game loop for FPV simulator with configuration"""
