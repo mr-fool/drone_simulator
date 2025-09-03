@@ -7,6 +7,7 @@ import time
 import os
 from dataclasses import dataclass
 from typing import List, Tuple
+from fpv_hud_system import FPVHUDSystem, integrate_hud_with_drone
 
 # Hardware control toggle
 ARDUINO_MODE = False
@@ -81,7 +82,7 @@ class FPVDrone:
         self.max_speed_achieved = 0.0
         self.total_distance_traveled = 0.0
         self.previous_position = Vector3(x, y, z)
-        
+
     def update_physics(self, throttle, yaw, pitch, roll):
         """Update FPV drone physics with user-configurable limits"""
         if self.crashed:
@@ -246,7 +247,10 @@ class FPVSimulator:
         self.WIDTH, self.HEIGHT = 1200, 800
         self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
         pygame.display.set_caption("EMG FPV Drone Training Simulator - Configuration")
-        
+
+        # Initialize HUD system AFTER WIDTH/HEIGHT are defined
+        self.hud_system = FPVHUDSystem(self.WIDTH, self.HEIGHT)
+
         # Load all required images
         self.load_images()
         
@@ -578,130 +582,8 @@ class FPVSimulator:
                     pygame.draw.circle(self.screen, self.WHITE, pos_2d, target.radius, 2)
     
     def draw_hud(self):
-        """Draw FPV racing HUD with user-configurable parameters"""
-        # Battery indicator
-        battery_width = 200
-        battery_height = 20
-        battery_x = 20
-        battery_y = 20
-        
-        pygame.draw.rect(self.screen, self.WHITE, 
-                        (battery_x, battery_y, battery_width, battery_height), 2)
-        
-        battery_fill = int((self.drone.battery / 100) * (battery_width - 4))
-        battery_color = self.GREEN if self.drone.battery > 30 else self.RED
-        pygame.draw.rect(self.screen, battery_color,
-                        (battery_x + 2, battery_y + 2, battery_fill, battery_height - 4))
-        
-        battery_text = self.font_small.render(f"Battery: {int(self.drone.battery)}%", True, self.WHITE)
-        self.screen.blit(battery_text, (battery_x, battery_y + 25))
-        
-        # Current speed (large display)
-        speed_kmh = self.drone.get_speed_kmh()
-        speed_text = self.font_large.render(f"{speed_kmh:.0f} km/h", True, self.YELLOW)
-        speed_rect = speed_text.get_rect(center=(self.WIDTH//2, 50))
-        self.screen.blit(speed_text, speed_rect)
-        
-        # Speed vs maximum speed indicator
-        speed_percentage = (speed_kmh / self.drone.max_speed_kmh) * 100
-        speed_info = self.font_small.render(f"Speed: {speed_percentage:.0f}% of max ({self.drone.max_speed_kmh:.0f} km/h)", True, self.GRAY)
-        speed_info_rect = speed_info.get_rect(center=(self.WIDTH//2, 80))
-        self.screen.blit(speed_info, speed_info_rect)
-        
-        # Range information
-        current_range_km = self.drone.get_range_from_start_km()
-        range_percentage = (current_range_km / self.drone.max_range_km) * 100
-        range_color = self.RED if range_percentage > 90 else self.YELLOW if range_percentage > 70 else self.WHITE
-        
-        range_text = self.font_small.render(f"Range: {current_range_km:.2f} km / {self.drone.max_range_km:.0f} km ({range_percentage:.0f}%)", True, range_color)
-        self.screen.blit(range_text, (battery_x, battery_y + 85))
-        
-        # Total distance traveled
-        total_distance = self.drone.get_total_distance_km()
-        distance_text = self.font_small.render(f"Distance Traveled: {total_distance:.2f} km", True, self.WHITE)
-        self.screen.blit(distance_text, (battery_x, battery_y + 105))
-        
-        # Maximum speed achieved
-        max_speed_text = self.font_small.render(f"Max Speed Achieved: {self.drone.max_speed_achieved:.0f} km/h", True, self.ORANGE)
-        self.screen.blit(max_speed_text, (battery_x, battery_y + 125))
-        
-        # Altitude
-        altitude = max(0, 600 - self.drone.position.y)
-        altitude_text = self.font_small.render(f"Altitude: {altitude:.0f}m", True, self.WHITE)
-        self.screen.blit(altitude_text, (battery_x, battery_y + 45))
-        
-        # Configuration display
-        config_text = self.font_small.render(f"FPV Drone - Max: {self.drone.max_speed_kmh}km/h, Range: {self.drone.max_range_km}km", True, self.ORANGE)
-        self.screen.blit(config_text, (battery_x, battery_y + 65))
-        
-        # Scenario information
-        scenario_text = self.font_medium.render(f"Mission: {self.current_scenario.name}", True, self.WHITE)
-        self.screen.blit(scenario_text, (20, self.HEIGHT - 120))
-        
-        targets_left = len([t for t in self.current_scenario.targets if not t.collected])
-        targets_text = self.font_small.render(f"Checkpoints remaining: {targets_left}", True, self.WHITE)
-        self.screen.blit(targets_text, (20, self.HEIGHT - 95))
-        
-        # Time remaining
-        elapsed_time = time.time() - self.current_scenario.start_time
-        time_left = max(0, self.current_scenario.time_limit - elapsed_time)
-        time_color = self.RED if time_left < 10 else self.WHITE
-        time_text = self.font_small.render(f"Time: {time_left:.1f}s", True, time_color)
-        self.screen.blit(time_text, (20, self.HEIGHT - 70))
-        
-        # EMG signal indicators (if in Arduino mode)
-        if ARDUINO_MODE:
-            signal_x = self.WIDTH - 200
-            signal_y = 20
-            
-            signal_labels = ["Throttle", "Yaw", "Pitch", "Roll"]
-            for i, (label, signal) in enumerate(zip(signal_labels, emg_signals)):
-                # Signal strength bar
-                bar_width = 100
-                bar_height = 10
-                signal_strength = min(100, signal)
-                
-                pygame.draw.rect(self.screen, self.GRAY, 
-                               (signal_x, signal_y + i * 25, bar_width, bar_height))
-                pygame.draw.rect(self.screen, self.GREEN, 
-                               (signal_x, signal_y + i * 25, int(signal_strength), bar_height))
-                
-                label_text = self.font_small.render(f"{label}: {signal:.0f}", True, self.WHITE)
-                self.screen.blit(label_text, (signal_x + 110, signal_y + i * 25 - 2))
-        
-        # Control instructions
-        control_mode = "EMG Control Active" if ARDUINO_MODE else "Keyboard Control"
-        mode_text = self.font_small.render(control_mode, True, self.YELLOW)
-        self.screen.blit(mode_text, (self.WIDTH - 200, self.HEIGHT - 100))
-        
-        if not ARDUINO_MODE:
-            controls = ["SPACE: Throttle", "WASD: Pitch/Roll", "QE: Yaw", "R: Reset", "ESC: Config"]
-            for i, control in enumerate(controls):
-                control_text = self.font_small.render(control, True, self.WHITE)
-                self.screen.blit(control_text, (self.WIDTH - 200, self.HEIGHT - 75 + i * 15))
-        
-        # Range warning
-        range_percentage = (self.drone.get_range_from_start_km() / self.drone.max_range_km) * 100
-        if range_percentage > 90:
-            warning_text = self.font_medium.render("WARNING: APPROACHING MAX RANGE!", True, self.RED)
-            warning_rect = warning_text.get_rect(center=(self.WIDTH//2, 120))
-            # Flash warning
-            if int(time.time() * 3) % 2 == 0:
-                self.screen.blit(warning_text, warning_rect)
-        
-        # First-person crosshair
-        crosshair_x = self.WIDTH // 2
-        crosshair_y = self.HEIGHT // 2
-        crosshair_size = 15
-        
-        # Draw crosshair lines
-        pygame.draw.line(self.screen, self.WHITE, 
-                        (crosshair_x - crosshair_size, crosshair_y), 
-                        (crosshair_x + crosshair_size, crosshair_y), 2)
-        pygame.draw.line(self.screen, self.WHITE,
-                        (crosshair_x, crosshair_y - crosshair_size),
-                        (crosshair_x, crosshair_y + crosshair_size), 2)
-        pygame.draw.circle(self.screen, self.WHITE, (crosshair_x, crosshair_y), 3, 1)
+        """Draw advanced FPV HUD system"""
+        integrate_hud_with_drone(self.drone, self.hud_system, self.screen)
     
     def run(self):
         """Main game loop for FPV simulator with configuration"""
