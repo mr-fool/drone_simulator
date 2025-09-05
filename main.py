@@ -678,6 +678,11 @@ class FPVSimulator:
                     self.drone.crashed = True
                     print("CRASH: Flew into obstacle!")
                 
+                # FIXED: Check ground collision using consistent coordinate system
+                if self.drone.position.y >= 590:  # Ground is at Y=600, crash at Y=590
+                    self.drone.crashed = True
+                    print("CRASH: Hit the ground!")
+                
                 # Check target collection using TRUE FPV detection
                 collected_target = self.check_fpv_target_collection()
                 if collected_target:
