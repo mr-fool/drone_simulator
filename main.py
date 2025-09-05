@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from typing import List, Tuple
 from fpv_hud_system import FPVHUDSystem, integrate_hud_with_drone
 
+
+# Import custom classes
+from vector3 import Vector3
+
 # Hardware control toggle
 ARDUINO_MODE = False
 
@@ -39,21 +43,6 @@ def arduino_data():
 if ARDUINO_MODE:
     arduino_thread = threading.Thread(target=arduino_data, daemon=True)
     arduino_thread.start()
-
-@dataclass
-class Vector3:
-    x: float
-    y: float
-    z: float
-    
-    def __add__(self, other):
-        return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
-    
-    def __mul__(self, scalar):
-        return Vector3(self.x * scalar, self.y * scalar, self.z * scalar)
-    
-    def magnitude(self):
-        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
 
 class FPVDrone:
     def __init__(self, x=0, y=300, z=0, max_speed_kmh=180, max_range_km=5):
