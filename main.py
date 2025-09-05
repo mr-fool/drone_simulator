@@ -400,73 +400,6 @@ class FPVSimulator:
             
             return throttle, yaw, pitch, roll
 
-    def draw_obstacles(self):
-        """Draw obstacles using enhanced renderer"""
-        for obstacle in self.current_scenario.obstacles:
-            pos_2d = self.obstacle_renderer.project_3d_to_2d(obstacle.position)
-            
-            if obstacle.obstacle_type in ["building", "skyscraper", "tower", "warehouse"]:
-                self.obstacle_renderer.draw_building(self.screen, obstacle, pos_2d)
-            elif obstacle.obstacle_type in ["tree", "pine"]:
-                self.obstacle_renderer.draw_tree(self.screen, obstacle, pos_2d)
-            else:
-                # Fallback for any custom obstacle types
-                width_2d = int(obstacle.width * 0.7)
-                height_2d = int(obstacle.height * 0.7)
-                pygame.draw.rect(self.screen, obstacle.color,
-                               (pos_2d[0] - width_2d//2, pos_2d[1] - height_2d//2,
-                                width_2d, height_2d))
-
-    def draw_targets(self):
-        """Draw targets using enhanced renderer"""
-        for target in self.current_scenario.targets:
-            if not target.collected:
-                pos_2d = self.obstacle_renderer.project_3d_to_2d(target.position)
-                self.obstacle_renderer.draw_target(self.screen, target, pos_2d)
-
-    def project_3d_to_2d(self, pos):
-        """Convert 3D position to 2D screen coordinates (delegates to renderer)"""
-        return self.obstacle_renderer.project_3d_to_2d(pos)
-
-    def draw_background(self):
-        """Draw background sky"""
-        if self.images['sky_background']:
-            bg_scaled = pygame.transform.scale(self.images['sky_background'], (self.WIDTH, self.HEIGHT))
-            self.screen.blit(bg_scaled, (0, 0))
-        else:
-            # Fallback gradient sky
-            for y in range(self.HEIGHT//2):
-                color_ratio = y / (self.HEIGHT//2)
-                r = int(135 + (25 * color_ratio))
-                g = int(206 + (25 * color_ratio))
-                b = int(235 + (20 * color_ratio))
-                pygame.draw.line(self.screen, (r, g, b), (0, y), (self.WIDTH, y))
-    
-    def draw_ground(self):
-        """Draw ground with texture"""
-        ground_y = self.project_3d_to_2d(Vector3(0, 600, 0))[1]
-        
-        if self.images['ground_texture']:
-            # Tile ground texture
-            ground_img = self.images['ground_texture']
-            tile_width = ground_img.get_width()
-            tile_height = ground_img.get_height()
-            
-            for x in range(0, self.WIDTH, tile_width):
-                for y in range(ground_y, self.HEIGHT, tile_height):
-                    self.screen.blit(ground_img, (x, y))
-        else:
-            # Fallback solid ground with grid
-            pygame.draw.rect(self.screen, (34, 139, 34), (0, ground_y, self.WIDTH, self.HEIGHT - ground_y))
-            
-            # Grid lines
-            for x in range(-500, 1000, 50):
-                start_3d = Vector3(x, 600, -200)
-                end_3d = Vector3(x, 600, 200)
-                start_2d = self.project_3d_to_2d(start_3d)
-                end_2d = self.project_3d_to_2d(end_3d)
-                pygame.draw.line(self.screen, (0, 100, 0), start_2d, end_2d, 1)
-    
     def draw_hud(self):
         """Draw HUD using the proper integration function with mission data"""
         # Calculate dynamic mission data
@@ -483,6 +416,210 @@ class FPVSimulator:
         
         # Use the proper integration function with mission data
         integrate_hud_with_drone(self.drone, self.hud_system, self.screen, mission_data)
+
+    def calculate_camera_transform(self):
+        """Calculate camera transformation based on drone's position and rotation"""
+        # Camera position is at drone position
+        camera_pos = self.drone.position
+        
+        # Calculate forward direction based on drone's yaw (heading)
+        yaw_rad = math.radians(self.drone.rotation.y)
+        pitch_rad = math.radians(self.drone.rotation.x)
+        
+        # Forward vector (where drone is looking)
+        forward = Vector3(
+            math.sin(yaw_rad) * math.cos(pitch_rad),
+            -math.sin(pitch_rad),  # Negative because up is negative Y
+            math.cos(yaw_rad) * math.cos(pitch_rad)
+        )
+        
+        # Up vector affected by roll
+        roll_rad = math.radians(self.drone.rotation.z)
+        up = Vector3(
+            math.sin(roll_rad),
+            math.cos(roll_rad),
+            0
+        )
+        
+        # Right vector (cross product of forward and up)
+        right = Vector3(
+            forward.z * up.y - forward.y * up.z,
+            forward.x * up.z - forward.z * up.x,
+            forward.y * up.x - forward.x * up.y
+        )
+        
+        return camera_pos, forward, up, right
+
+    def project_3d_to_fpv(self, world_pos):
+        """Project 3D world position to first-person view screen coordinates"""
+        camera_pos, forward, up, right = self.calculate_camera_transform()
+        
+        # Translate world position relative to camera
+        relative_pos = Vector3(
+            world_pos.x - camera_pos.x,
+            world_pos.y - camera_pos.y,
+            world_pos.z - camera_pos.z
+        )
+        
+        # Project onto camera's local coordinate system
+        x_cam = relative_pos.x * right.x + relative_pos.y * right.y + relative_pos.z * right.z
+        y_cam = relative_pos.x * up.x + relative_pos.y * up.y + relative_pos.z * up.z
+        z_cam = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z
+        
+        # Perspective projection (avoid division by zero)
+        if z_cam <= 0.1:
+            return None  # Object is behind camera or too close
+        
+        # Field of view settings
+        fov = 90  # degrees
+        fov_rad = math.radians(fov)
+        focal_length = self.WIDTH / (2 * math.tan(fov_rad / 2))
+        
+        # Project to screen coordinates
+        screen_x = self.WIDTH // 2 + (x_cam * focal_length / z_cam)
+        screen_y = self.HEIGHT // 2 - (y_cam * focal_length / z_cam)
+        
+        return int(screen_x), int(screen_y), z_cam
+
+    def check_fpv_collision(self):
+        """Check collision in first-person view using crosshair"""
+        center_x, center_y = self.WIDTH // 2, self.HEIGHT // 2
+        
+        for obstacle in self.current_scenario.obstacles:
+            projection = self.project_3d_to_fpv(obstacle.position)
+            if projection is None:
+                continue
+                
+            screen_x, screen_y, depth = projection
+            
+            # Only check collision if obstacle is reasonably close
+            if depth > 100:  # Ignore distant obstacles
+                continue
+            
+            # Check if obstacle is close to crosshair
+            distance_to_crosshair = math.sqrt((screen_x - center_x)**2 + (screen_y - center_y)**2)
+            
+            # Much smaller collision radius - only crash if very close to crosshair center
+            collision_radius = 20  # Fixed small radius instead of scaling
+            
+            # Also check 3D distance to drone
+            actual_3d_distance = math.sqrt(
+                (self.drone.position.x - obstacle.position.x)**2 + 
+                (self.drone.position.y - obstacle.position.y)**2 + 
+                (self.drone.position.z - obstacle.position.z)**2
+            )
+            
+            # Collision only if BOTH conditions are met:
+            # 1. Obstacle appears very close to crosshair center
+            # 2. Drone is actually close to obstacle in 3D space
+            if distance_to_crosshair < collision_radius and actual_3d_distance < 40:
+                return True
+                
+        return False
+
+    def check_fpv_target_collection(self):
+        """Check target collection in first-person view"""
+        center_x, center_y = self.WIDTH // 2, self.HEIGHT // 2
+        
+        for target in self.current_scenario.targets:
+            if target.collected:
+                continue
+                
+            projection = self.project_3d_to_fpv(target.position)
+            if projection is None:
+                continue
+                
+            screen_x, screen_y, depth = projection
+            
+            # Check if target is close to crosshair
+            distance_to_crosshair = math.sqrt((screen_x - center_x)**2 + (screen_y - center_y)**2)
+            
+            # Scale collection radius based on distance
+            scale_factor = max(0.2, 100.0 / depth) if depth > 0 else 0
+            collection_radius = target.radius * scale_factor
+            
+            # Collection if target is centered in crosshair AND close enough
+            if distance_to_crosshair < collection_radius and depth < 30:
+                target.collected = True
+                return target
+                
+        return None
+
+    def draw_fpv_ground(self):
+        """Draw ground plane in first-person view"""
+        # Create horizon line based on drone pitch
+        horizon_y = self.HEIGHT // 2 + int(self.drone.rotation.x * 5)
+        
+        # Sky (above horizon)
+        if horizon_y > 0:
+            for y in range(max(0, horizon_y)):
+                color_ratio = y / max(1, horizon_y)
+                r = int(135 + (25 * color_ratio))
+                g = int(206 + (25 * color_ratio))
+                b = int(235 + (20 * color_ratio))
+                pygame.draw.line(self.screen, (r, g, b), (0, y), (self.WIDTH, y))
+        
+        # Ground (below horizon)
+        if horizon_y < self.HEIGHT:
+            ground_rect = pygame.Rect(0, max(0, horizon_y), self.WIDTH, self.HEIGHT - max(0, horizon_y))
+            pygame.draw.rect(self.screen, (34, 139, 34), ground_rect)
+
+    def draw_fpv_obstacles(self):
+        """Draw obstacles in first-person view"""
+        for obstacle in self.current_scenario.obstacles:
+            projection = self.project_3d_to_fpv(obstacle.position)
+            if projection is None:
+                continue
+                
+            screen_x, screen_y, depth = projection
+            
+            # Skip if off-screen
+            if screen_x < -100 or screen_x > self.WIDTH + 100 or screen_y < -100 or screen_y > self.HEIGHT + 100:
+                continue
+                
+            # Scale based on distance
+            if depth <= 0:
+                continue
+                
+            scale_factor = max(0.1, 200.0 / depth)
+            width = max(1, int(obstacle.width * scale_factor))
+            height = max(1, int(obstacle.height * scale_factor))
+            
+            # Skip tiny distant objects
+            if width < 2 or height < 2:
+                continue
+                
+            # Draw obstacle
+            obstacle_rect = pygame.Rect(screen_x - width//2, screen_y - height//2, width, height)
+            if obstacle_rect.colliderect(pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)):
+                pygame.draw.rect(self.screen, obstacle.color, obstacle_rect)
+
+    def draw_fpv_targets(self):
+        """Draw targets in first-person view"""
+        for target in self.current_scenario.targets:
+            if target.collected:
+                continue
+                
+            projection = self.project_3d_to_fpv(target.position)
+            if projection is None:
+                continue
+                
+            screen_x, screen_y, depth = projection
+            
+            # Skip if off-screen
+            if screen_x < -50 or screen_x > self.WIDTH + 50 or screen_y < -50 or screen_y > self.HEIGHT + 50:
+                continue
+                
+            # Scale based on distance
+            if depth <= 0:
+                continue
+                
+            scale_factor = max(0.2, 100.0 / depth)
+            radius = max(3, int(target.radius * scale_factor))
+            
+            # Draw target
+            pygame.draw.circle(self.screen, target.color, (screen_x, screen_y), radius)
+            pygame.draw.circle(self.screen, (255, 255, 255), (screen_x, screen_y), radius, 2)
     
     def run(self):
         """Main game loop for FPV simulator with configuration"""
@@ -536,16 +673,16 @@ class FPVSimulator:
                 self.camera_position = self.drone.position
                 self.camera_rotation = self.drone.rotation
                 
-                # Check collisions with obstacles
-                for obstacle in self.current_scenario.obstacles:
-                    if obstacle.check_collision(self.drone):
-                        self.drone.crashed = True
+                # Check collisions using TRUE FPV collision detection
+                if self.check_fpv_collision():
+                    self.drone.crashed = True
+                    print("CRASH: Flew into obstacle!")
                 
-                # Check target collection
-                for target in self.current_scenario.targets:
-                    if target.check_collection(self.drone):
-                        self.score += 10
-                        print(f"Checkpoint collected at {self.drone.get_speed_kmh():.0f} km/h! Score: {self.score}")
+                # Check target collection using TRUE FPV detection
+                collected_target = self.check_fpv_target_collection()
+                if collected_target:
+                    self.score += 10
+                    print(f"Checkpoint collected at {self.drone.get_speed_kmh():.0f} km/h! Score: {self.score}")
                 
                 # Check scenario completion
                 if self.current_scenario.check_completion(self.drone):
@@ -571,13 +708,12 @@ class FPVSimulator:
                             self.drone.crashed = True
                             print("Mission failed: Maximum range exceeded")
                 
-                # Draw first-person view
+                # Draw TRUE FIRST-PERSON VIEW
                 self.screen.fill(self.BLACK)
-                self.draw_background()
-                self.draw_ground()
-                self.draw_obstacles()
-                self.draw_targets()
-                self.draw_hud()
+                self.draw_fpv_ground()        # Ground with horizon based on drone pitch
+                self.draw_fpv_obstacles()     # Obstacles with true perspective
+                self.draw_fpv_targets()       # Targets with proper distance scaling
+                self.draw_hud()               # HUD overlay
             
             pygame.display.flip()
             clock.tick(60)

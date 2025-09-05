@@ -25,14 +25,46 @@ class Obstacle:
         return colors.get(self.obstacle_type, (139, 69, 19))
         
     def check_collision(self, drone):
-        """Check if drone collides with this obstacle"""
+        """FIXED: Check collision based on both 3D position and screen projection"""
+        # Original 3D collision detection
         dx = abs(drone.position.x - self.position.x)
         dy = abs(drone.position.y - self.position.y)
         dz = abs(drone.position.z - self.position.z)
         
-        return (dx < (self.width/2 + drone.size/2) and 
-                dy < (self.height/2 + drone.size/2) and
-                dz < (self.depth/2 + drone.size/2))
+        # 3D bounding box collision
+        collision_3d = (dx < (self.width/2 + drone.size/2) and 
+                       dy < (self.height/2 + drone.size/2) and
+                       dz < (self.depth/2 + drone.size/2))
+        
+        return collision_3d
+    
+    def check_screen_collision(self, drone, screen_width, screen_height, project_func):
+        """NEW: Check if obstacle is in the crosshair path (screen-based collision)"""
+        # Get screen positions
+        drone_screen = project_func(drone.position)
+        obstacle_screen = project_func(self.position)
+        
+        # Center crosshair position
+        center_x, center_y = screen_width // 2, screen_height // 2
+        
+        # Calculate distance from obstacle to center crosshair
+        obstacle_to_center = math.sqrt((obstacle_screen[0] - center_x)**2 + 
+                                     (obstacle_screen[1] - center_y)**2)
+        
+        # Calculate distance from drone to obstacle in screen space
+        drone_to_obstacle = math.sqrt((drone_screen[0] - obstacle_screen[0])**2 + 
+                                    (drone_screen[1] - obstacle_screen[1])**2)
+        
+        # Collision if:
+        # 1. Obstacle is close to center crosshair (where drone is "aiming")
+        # 2. Drone is approaching the obstacle
+        # 3. Drone is at similar depth (z-coordinate) as obstacle
+        
+        crosshair_collision = obstacle_to_center < 60  # Obstacle near crosshair
+        approach_collision = drone_to_obstacle < 80   # Drone near obstacle on screen
+        depth_match = abs(drone.position.z - self.position.z) < 100  # Similar depth
+        
+        return crosshair_collision and approach_collision and depth_match
 
 class Target:
     def __init__(self, x, y, z, radius=15, target_type="checkpoint"):
@@ -62,6 +94,30 @@ class Target:
                            (drone.position.z - self.position.z)**2)
         
         if distance < (self.radius + drone.size/2):
+            self.collected = True
+            return True
+        return False
+    
+    def check_screen_collection(self, drone, screen_width, screen_height, project_func):
+        """NEW: Check collection based on crosshair alignment"""
+        if self.collected:
+            return False
+            
+        # Get screen positions
+        drone_screen = project_func(drone.position)
+        target_screen = project_func(self.position)
+        center_x, center_y = screen_width // 2, screen_height // 2
+        
+        # Distance from target to crosshair center
+        target_to_center = math.sqrt((target_screen[0] - center_x)**2 + 
+                                   (target_screen[1] - center_y)**2)
+        
+        # Distance from drone to target
+        drone_to_target = math.sqrt((drone_screen[0] - target_screen[0])**2 + 
+                                  (drone_screen[1] - target_screen[1])**2)
+        
+        # Collection if target is centered and drone is close
+        if target_to_center < 40 and drone_to_target < 60:
             self.collected = True
             return True
         return False
@@ -181,6 +237,21 @@ class ObstacleRenderer:
         screen_x = self.screen_width // 2 + (pos.x - pos.z * 0.5) * 0.8
         screen_y = self.screen_height // 2 + (pos.y + (pos.x + pos.z) * 0.2) * 0.6
         return int(screen_x), int(screen_y)
+    
+    def draw_collision_warning(self, screen, obstacles, drone):
+        """NEW: Draw warning indicators when obstacles are in crosshair path"""
+        center_x, center_y = self.screen_width // 2, self.screen_height // 2
+        warning_shown = False
+        
+        for obstacle in obstacles:
+            if obstacle.check_screen_collision(drone, self.screen_width, self.screen_height, self.project_3d_to_2d):
+                # Draw red warning ring around crosshair
+                pygame.draw.circle(screen, (255, 0, 0), (center_x, center_y), 35, 4)
+                pygame.draw.circle(screen, (255, 100, 100), (center_x, center_y), 30, 2)
+                warning_shown = True
+                break
+        
+        return warning_shown
     
     def draw_building(self, screen, obstacle, pos_2d):
         """Draw building-type obstacles with 3D effect"""
