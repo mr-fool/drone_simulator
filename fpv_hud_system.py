@@ -374,8 +374,17 @@ class FPVHUDSystem:
         self.draw_flight_mode_indicator(screen, flight_mode, armed)
         self.draw_mission_info(screen, mission_name, targets_remaining, time_left)
 
-def integrate_hud_with_drone(drone, hud_system, screen):
-    """Integration function"""
+def integrate_hud_with_drone(drone, hud_system, screen, mission_data=None):
+    """Integration function with optional mission data"""
+    
+    # Default mission data if none provided
+    if mission_data is None:
+        mission_data = {
+            'mission_name': 'Training Flight',
+            'targets_remaining': 0,
+            'time_left': 0.0
+        }
+    
     drone_data = {
         'heading': drone.rotation.y % 360,
         'pitch': drone.rotation.x,
@@ -389,9 +398,10 @@ def integrate_hud_with_drone(drone, hud_system, screen):
         'max_range': drone.max_range_km,
         'flight_mode': 'FPV' if not drone.crashed else 'CRASH',
         'armed': not drone.crashed,
-        'mission_name': 'High-Speed Racing',
-        'targets_remaining': 6,
-        'time_left': 90.0
+        'mission_name': mission_data.get('mission_name', 'Training Flight'),
+        'targets_remaining': mission_data.get('targets_remaining', 0),
+        'time_left': mission_data.get('time_left', 0.0)
     }
     
     hud_system.draw_complete_hud(screen, drone_data)
+    

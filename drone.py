@@ -94,18 +94,33 @@ class FPVDrone:
                                  (self.position.z - self.previous_position.z)**2)
         self.total_distance_traveled += distance_delta
         
-        # Battery consumption (scales with speed and power usage)
-        # Use emg_signals if provided, otherwise use current control inputs
+        # Battery consumption (realistic for FPV drones: 10-30 min flight time)
+        # At 60 FPS, 15 minutes = 54,000 frames
+        # Target: 100% battery should last ~15 minutes of moderate flying
+        
+        # Base power consumption (always draining, like hover power)
+        base_power_per_frame = 100.0 / (15 * 60 * 60)  # 15 minutes at 60 FPS
+        
+        # Control activity power (aggressive flying uses more power)
         if emg_signals:
-            base_power_usage = (abs(emg_signals[0]) + abs(emg_signals[1]) + 
-                               abs(emg_signals[2]) + abs(emg_signals[3])) * 0.008
+            control_activity = (abs(emg_signals[0]) + abs(emg_signals[1]) + 
+                               abs(emg_signals[2]) + abs(emg_signals[3])) / 4.0  # Average activity 0-1
         else:
             # Fallback to using current control inputs
-            base_power_usage = (abs(throttle) + abs(yaw) + abs(pitch) + abs(roll)) * 0.008
+            control_activity = (abs(throttle) + abs(yaw) + abs(pitch) + abs(roll)) / 4.0
         
-        # Additional power consumption at high speeds
-        speed_power = (speed / self.max_speed_ms) * 0.012
-        self.battery = max(0, self.battery - base_power_usage - speed_power)
+        # Activity multiplier: gentle flying = 1x, aggressive = 2x power consumption
+        activity_multiplier = 1.0 + control_activity
+        
+        # Speed power penalty (high speed = more drag = more power)
+        speed_ratio = speed / self.max_speed_ms
+        speed_multiplier = 1.0 + (speed_ratio * 0.5)  # Up to 50% more power at max speed
+        
+        # Total power consumption per frame
+        total_power_drain = base_power_per_frame * activity_multiplier * speed_multiplier
+        
+        # Apply battery drain
+        self.battery = max(0, self.battery - total_power_drain)
         
         # Check range limit
         distance_from_start = math.sqrt((self.position.x - self.start_position.x)**2 + 
