@@ -101,18 +101,30 @@ class FPVDrone:
             
         # Apply rotational movements (very responsive for racing)
         self.rotation.x += pitch * self.rotation_speed  # pitch
-        self.rotation.y = (self.rotation.y + yaw * self.rotation_speed) % 360  # yaw (heading)
         self.rotation.z += roll * self.rotation_speed   # roll
         
         # Convert rotation to movement (acrobatic capabilities)
-        # Use yaw for directional movement
+        # Use roll for main turning (like real aircraft)
         heading_rad = math.radians(self.rotation.y)
         forward_speed = -pitch * 0.15  # High forward speed capability
-        side_speed = roll * 0.15       # Rapid lateral movement
         
-        # Apply movement relative to drone's heading
-        self.velocity.x += math.sin(heading_rad) * forward_speed + math.cos(heading_rad) * side_speed
-        self.velocity.z += math.cos(heading_rad) * forward_speed - math.sin(heading_rad) * side_speed
+        # Roll creates turning by banking the aircraft
+        if abs(roll) > 0.1:
+            # When rolling, change heading (yaw) and create turning motion
+            self.rotation.y = (self.rotation.y + roll * self.rotation_speed * 0.5) % 360  # Roll affects heading
+            
+            # Banking creates coordinated turn
+            side_speed = roll * 0.15
+            self.velocity.x += math.sin(heading_rad) * forward_speed + math.cos(heading_rad) * side_speed
+            self.velocity.z += math.cos(heading_rad) * forward_speed - math.sin(heading_rad) * side_speed
+        else:
+            # No roll - straight flight
+            self.velocity.x += math.sin(heading_rad) * forward_speed
+            self.velocity.z += math.cos(heading_rad) * forward_speed
+        
+        # Yaw provides additional turning control (like rudder)
+        if abs(yaw) > 0.1:
+            self.rotation.y = (self.rotation.y + yaw * self.rotation_speed * 0.3) % 360  # Less effect than roll
         
         # Apply drag
         self.velocity = self.velocity * self.drag
@@ -591,9 +603,16 @@ class FPVSimulator:
         elapsed_time = time.time() - self.current_scenario.start_time
         time_left = max(0, self.current_scenario.time_limit - elapsed_time)
         
+        # Get current heading and add debug output
+        current_heading = self.drone.rotation.y % 360
+        
+        # Debug: Print heading value occasionally to console
+        if int(time.time()) % 5 == 0:  # Print every 5 seconds
+            print(f"Debug - Drone heading: {current_heading:.1f}°, Yaw rotation: {self.drone.rotation.y:.1f}")
+        
         # Create enhanced drone data with mission info
         drone_data = {
-            'heading': self.drone.rotation.y % 360,
+            'heading': current_heading,
             'pitch': self.drone.rotation.x,
             'roll': self.drone.rotation.z,
             'speed': self.drone.get_speed_kmh(),
@@ -634,16 +653,24 @@ class FPVSimulator:
                         self.handle_configuration_input(event.key)
                         
                     elif self.game_state == "FLYING":
-                        if event.key == pygame.K_r and not ARDUINO_MODE:
-                            # Reset current scenario
+                        if event.key == pygame.K_r:
+                            # Reset current scenario (works even if crashed)
                             self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
                             self.current_scenario = self.create_high_speed_scenario()
+                            self.score = 0  # Reset score
                             print(f"FPV scenario reset - Max Speed: {self.max_speed_kmh} km/h, Max Range: {self.max_range_km} km")
                             
                         elif event.key == pygame.K_ESCAPE:
                             # Return to configuration
                             self.game_state = "CONFIGURATION"
                             print("Returning to configuration screen")
+                            
+                        elif event.key == pygame.K_SPACE and self.drone.crashed:
+                            # Quick restart when crashed - just press spacebar
+                            self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
+                            self.current_scenario = self.create_high_speed_scenario()
+                            self.score = 0
+                            print("Quick restart - Press SPACE when crashed to restart instantly")
             
             if self.game_state == "CONFIGURATION":
                 self.draw_configuration_screen()
