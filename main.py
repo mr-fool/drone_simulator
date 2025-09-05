@@ -395,7 +395,10 @@ class FPVSimulator:
             keys = pygame.key.get_pressed()
             throttle = 1.0 if keys[pygame.K_SPACE] else 0.0
             yaw = (-0.5 if keys[pygame.K_q] else 0.0) + (0.5 if keys[pygame.K_e] else 0.0)
-            pitch = (-0.5 if keys[pygame.K_w] else 0.0) + (0.5 if keys[pygame.K_s] else 0.0)
+            
+            # FIXED: Inverted pitch control for intuitive flight
+            pitch = (0.5 if keys[pygame.K_w] else 0.0) + (-0.5 if keys[pygame.K_s] else 0.0)  # W=nose up, S=nose down
+            
             roll = (-0.5 if keys[pygame.K_a] else 0.0) + (0.5 if keys[pygame.K_d] else 0.0)
             
             return throttle, yaw, pitch, roll
@@ -470,7 +473,7 @@ class FPVSimulator:
         if z_cam <= 0.1:
             return None  # Object is behind camera or too close
         
-        # Field of view settings
+        # Field of view settings - make consistent with HUD expectations
         fov = 90  # degrees
         fov_rad = math.radians(fov)
         focal_length = self.WIDTH / (2 * math.tan(fov_rad / 2))
@@ -546,24 +549,68 @@ class FPVSimulator:
         return None
 
     def draw_fpv_ground(self):
-        """Draw ground plane in first-person view"""
-        # Create horizon line based on drone pitch
-        horizon_y = self.HEIGHT // 2 + int(self.drone.rotation.x * 5)
+        """Draw ground plane in first-person view with proper altitude consideration"""
+        # Calculate actual altitude (distance from ground)
+        actual_altitude = max(0, 600 - self.drone.position.y)
         
-        # Sky (above horizon)
+        # Base horizon position from pitch
+        pitch_offset = int(self.drone.rotation.x * 5)
+        
+        # Altitude effect: higher altitude = ground appears lower on screen
+        # At ground level (altitude=0), ground fills most of screen
+        # At high altitude (altitude=300+), ground appears as thin strip
+        altitude_factor = min(actual_altitude / 200.0, 2.0)  # Cap at 2.0 for very high altitudes
+        altitude_offset = int(altitude_factor * 100)  # More altitude = more offset downward
+        
+        # Combined horizon calculation
+        horizon_y = (self.HEIGHT // 2) + pitch_offset + altitude_offset
+        
+        # Ensure horizon stays within reasonable bounds
+        horizon_y = max(self.HEIGHT // 4, min(self.HEIGHT - 50, horizon_y))
+        
+        # Sky (above horizon) - gradient gets more visible at higher altitudes
         if horizon_y > 0:
-            for y in range(max(0, horizon_y)):
+            for y in range(min(horizon_y, self.HEIGHT)):
+                # Sky gradient - deeper blue at higher altitudes
+                altitude_intensity = min(actual_altitude / 300.0, 1.0)
                 color_ratio = y / max(1, horizon_y)
-                r = int(135 + (25 * color_ratio))
-                g = int(206 + (25 * color_ratio))
-                b = int(235 + (20 * color_ratio))
+                
+                # Base sky color gets deeper with altitude
+                base_r = int(135 - (altitude_intensity * 50))
+                base_g = int(206 - (altitude_intensity * 30))
+                base_b = int(235 - (altitude_intensity * 20))
+                
+                r = int(base_r + (25 * color_ratio))
+                g = int(base_g + (25 * color_ratio))
+                b = int(base_b + (20 * color_ratio))
+                
+                r = max(0, min(255, r))
+                g = max(0, min(255, g))
+                b = max(0, min(255, b))
+                
                 pygame.draw.line(self.screen, (r, g, b), (0, y), (self.WIDTH, y))
         
-        # Ground (below horizon)
+        # Ground (below horizon) - only draw if visible
         if horizon_y < self.HEIGHT:
             ground_rect = pygame.Rect(0, max(0, horizon_y), self.WIDTH, self.HEIGHT - max(0, horizon_y))
-            pygame.draw.rect(self.screen, (34, 139, 34), ground_rect)
-
+            
+            # Ground color varies with distance/altitude
+            if actual_altitude < 50:  # Very low altitude - bright green
+                ground_color = (34, 139, 34)
+            elif actual_altitude < 150:  # Medium altitude - darker green
+                ground_color = (20, 100, 20)
+            else:  # High altitude - very dark, distant ground
+                ground_color = (10, 60, 10)
+                
+            pygame.draw.rect(self.screen, ground_color, ground_rect)
+            
+            # Add subtle texture for ground at low altitudes
+            if actual_altitude < 100 and horizon_y < self.HEIGHT - 20:
+                for i in range(0, self.WIDTH, 40):
+                    texture_y = horizon_y + 20 + (i % 3) * 5
+                    if texture_y < self.HEIGHT:
+                        pygame.draw.line(self.screen, (25, 90, 25), 
+                                    (i, texture_y), (i + 20, texture_y), 1)
     def draw_fpv_obstacles(self):
         """Draw obstacles in first-person view"""
         for obstacle in self.current_scenario.obstacles:
@@ -621,6 +668,13 @@ class FPVSimulator:
             pygame.draw.circle(self.screen, target.color, (screen_x, screen_y), radius)
             pygame.draw.circle(self.screen, (255, 255, 255), (screen_x, screen_y), radius, 2)
     
+    def check_ground_collision(self):
+        """Check ground collision using consistent coordinate system"""
+        # Ground is at Y=600, crash slightly above at Y=590
+        if self.drone.position.y >= 590:
+            return True
+        return False
+
     def run(self):
         """Main game loop for FPV simulator with configuration"""
         clock = pygame.time.Clock()
@@ -678,8 +732,8 @@ class FPVSimulator:
                     self.drone.crashed = True
                     print("CRASH: Flew into obstacle!")
                 
-                # FIXED: Check ground collision using consistent coordinate system
-                if self.drone.position.y >= 590:  # Ground is at Y=600, crash at Y=590
+                # Check ground collision using consistent coordinate system
+                if self.check_ground_collision():
                     self.drone.crashed = True
                     print("CRASH: Hit the ground!")
                 
