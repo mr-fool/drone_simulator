@@ -190,9 +190,17 @@ class FPVDrone:
             if not DebugConfig.DISABLE_GROUND_COLLISION:
                 self.crashed = True
                 
-        # Flight ceiling
-        if self.position.y < (300 - self.flight_ceiling):
-            self.position.y = 300 - self.flight_ceiling
+        # FIXED: Soft flight ceiling that allows controlled descent
+        max_ceiling_y = 300 - self.flight_ceiling  # Y = -200
+        if self.position.y < max_ceiling_y:
+            # Soft ceiling - apply downward force instead of hard constraint
+            ceiling_distance = abs(max_ceiling_y - self.position.y)  # Use abs() for magnitude
+            downward_force = ceiling_distance * 0.1  # Gentle push down
+            self.velocity.y += downward_force  # This pushes DOWN (positive Y)
+            
+            # Only hard-limit at extreme altitude
+            if self.position.y < max_ceiling_y - 50:  # 50m buffer above ceiling
+                self.position.y = max_ceiling_y - 50
             
         # Boundary limits
         self.position.x = max(-400, min(1200, self.position.x))
