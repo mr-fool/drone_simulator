@@ -8,11 +8,13 @@ import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
-#import custom class
+# Import custom classes
 from fpv_hud_system import FPVHUDSystem, integrate_hud_with_drone
 from vector3 import Vector3
 from drone import FPVDrone
 from obstacles import EnvironmentGenerator, ObstacleRenderer
+from physics_manager import physics_manager, collision_manager
+from config import DebugConfig, PhysicsConfig
 
 
 # Hardware control toggle
@@ -46,7 +48,6 @@ if ARDUINO_MODE:
     arduino_thread = threading.Thread(target=arduino_data, daemon=True)
     arduino_thread.start()
 
-
 class TrainingScenario:
     def __init__(self, name, description, obstacles, targets, time_limit=60):
         self.name = name
@@ -64,14 +65,22 @@ class TrainingScenario:
 class FPVSimulator:
     def __init__(self):
         pygame.init()
+        
+        # Print debug status
+        DebugConfig.print_active_flags()
+
         self.WIDTH, self.HEIGHT = 1200, 800
         self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
         pygame.display.set_caption("EMG FPV Drone Training Simulator - Configuration")
 
+        # Initialize physics manager
+        self.physics = physics_manager
+        self.collision = collision_manager
+
         # Initialize HUD system AFTER WIDTH/HEIGHT are defined
         self.hud_system = FPVHUDSystem(self.WIDTH, self.HEIGHT)
         
-        # Initialize enhanced obstacle renderer
+        # Initialize enhanced obstacle renderer with physics manager
         self.obstacle_renderer = ObstacleRenderer(self.WIDTH, self.HEIGHT)
 
         # Load all required images
@@ -352,15 +361,20 @@ class FPVSimulator:
             self.environment_type = "forest"
         elif key == pygame.K_9:
             self.environment_type = "hybrid"
+
         elif key == pygame.K_RETURN:
-            # Start simulation with configured parameters
-            self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
-            self.current_scenario = self.create_scenario_by_environment()
-            self.game_state = "FLYING"
-            print(f"Starting FPV simulation:")
-            print(f"  Environment: {self.environment_type.title()}")
-            print(f"  Max Speed: {self.max_speed_kmh} km/h")
-            print(f"  Max Range: {self.max_range_km} km")
+                    # Start simulation with configured parameters
+                    spawn_y = DebugConfig.SAFE_SPAWN_ALTITUDE if DebugConfig.is_testing_mode() else 300
+                    self.drone = FPVDrone(100, spawn_y, 0, self.max_speed_kmh, self.max_range_km)
+                    self.current_scenario = self.create_scenario_by_environment()
+                    self.game_state = "FLYING"
+                    
+                    if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                        print(f"Starting FPV simulation:")
+                        print(f"  Environment: {self.environment_type.title()}")
+                        print(f"  Max Speed: {self.max_speed_kmh} km/h")
+                        print(f"  Max Range: {self.max_range_km} km")
+                        print(f"  Spawn Altitude: {spawn_y}")
 
     def create_scenario_by_environment(self):
         """Create scenario based on selected environment type"""
@@ -426,172 +440,80 @@ class FPVSimulator:
         # Use the proper integration function with mission data
         integrate_hud_with_drone(self.drone, self.hud_system, self.screen, mission_data)
 
-    def calculate_camera_transform(self):
-        """Calculate camera transformation based on drone's position and rotation"""
-        # Camera position is at drone position
-        camera_pos = self.drone.position
-        
-        # Calculate forward direction based on drone's yaw (heading)
-        yaw_rad = math.radians(self.drone.rotation.y)
-        pitch_rad = math.radians(self.drone.rotation.x)
-        
-        # Forward vector (where drone is looking)
-        forward = Vector3(
-            math.sin(yaw_rad) * math.cos(pitch_rad),
-            -math.sin(pitch_rad),  # Negative because up is negative Y
-            math.cos(yaw_rad) * math.cos(pitch_rad)
-        )
-        
-        # Up vector affected by roll
-        roll_rad = math.radians(self.drone.rotation.z)
-        up = Vector3(
-            math.sin(roll_rad),
-            math.cos(roll_rad),
-            0
-        )
-        
-        # Right vector (cross product of forward and up)
-        right = Vector3(
-            forward.z * up.y - forward.y * up.z,
-            forward.x * up.z - forward.z * up.x,
-            forward.y * up.x - forward.x * up.y
-        )
-        
-        return camera_pos, forward, up, right
-
     def project_3d_to_fpv(self, world_pos):
-        """Project 3D world position to first-person view screen coordinates"""
-        camera_pos, forward, up, right = self.calculate_camera_transform()
-        
-        # Translate world position relative to camera
-        relative_pos = Vector3(
-            world_pos.x - camera_pos.x,
-            world_pos.y - camera_pos.y,
-            world_pos.z - camera_pos.z
+        """Use unified projection from physics manager"""
+        return self.physics.project_3d_to_screen(
+            world_pos, 
+            self.drone.position, 
+            self.drone.rotation
         )
-        
-        # Project onto camera's local coordinate system
-        x_cam = relative_pos.x * right.x + relative_pos.y * right.y + relative_pos.z * right.z
-        y_cam = relative_pos.x * up.x + relative_pos.y * up.y + relative_pos.z * up.z
-        z_cam = relative_pos.x * forward.x + relative_pos.y * forward.y + relative_pos.z * forward.z
-        
-        # Perspective projection (avoid division by zero)
-        if z_cam <= 0.1:
-            return None  # Object is behind camera or too close
-        
-        # Field of view settings - make consistent with HUD expectations
-        fov = 90  # degrees
-        fov_rad = math.radians(fov)
-        focal_length = self.WIDTH / (2 * math.tan(fov_rad / 2))
-        
-        # Project to screen coordinates
-        screen_x = self.WIDTH // 2 + (x_cam * focal_length / z_cam)
-        screen_y = self.HEIGHT // 2 - (y_cam * focal_length / z_cam)
-        
-        return int(screen_x), int(screen_y), z_cam
 
     def check_fpv_collision(self):
-        """Check collision in first-person view using crosshair"""
-        # DISABLED FOR TESTING - uncomment when needed
-        """
-        center_x, center_y = self.WIDTH // 2, self.HEIGHT // 2
-        
-        for obstacle in self.current_scenario.obstacles:
-            projection = self.project_3d_to_fpv(obstacle.position)
-            if projection is None:
-                continue
-                
-            screen_x, screen_y, depth = projection
-            
-            # Only check collision if obstacle is reasonably close
-            if depth > 100:  # Ignore distant obstacles
-                continue
-            
-            # Check if obstacle is close to crosshair
-            distance_to_crosshair = math.sqrt((screen_x - center_x)**2 + (screen_y - center_y)**2)
-            
-            # Much smaller collision radius - only crash if very close to crosshair center
-            collision_radius = 20  # Fixed small radius instead of scaling
-            
-            # Also check 3D distance to drone
-            actual_3d_distance = math.sqrt(
-                (self.drone.position.x - obstacle.position.x)**2 + 
-                (self.drone.position.y - obstacle.position.y)**2 + 
-                (self.drone.position.z - obstacle.position.z)**2
-            )
-            
-            # Collision only if BOTH conditions are met:
-            # 1. Obstacle appears very close to crosshair center
-            # 2. Drone is actually close to obstacle in 3D space
-            if distance_to_crosshair < collision_radius and actual_3d_distance < 40:
-                return True
-        """        
-        return False
+        """Use unified collision detection with debug override"""
+        if DebugConfig.DISABLE_OBSTACLE_COLLISION:
+            return False
+        return self.collision.check_drone_obstacle_collision(
+            self.drone, 
+            self.current_scenario.obstacles
+        ) is not None
 
     def check_fpv_target_collection(self):
-        """Check target collection in first-person view"""
-        center_x, center_y = self.WIDTH // 2, self.HEIGHT // 2
+        """Use unified target collection"""
+        return self.collision.check_target_collection(
+            self.drone, 
+            self.current_scenario.targets, 
+            self.drone.rotation
+        )
+    
+    def check_ground_collision(self):
+        """Use unified ground collision detection with debug override"""
+        if DebugConfig.DISABLE_GROUND_COLLISION:
+            return False
+        return self.collision.check_drone_ground_collision(self.drone)
+
+    def draw_debug_info(self):
+        """Draw debug information on screen"""
+        if not DebugConfig.is_testing_mode():
+            return
+            
+        debug_y = 10
+        line_height = 25
         
-        for target in self.current_scenario.targets:
-            if target.collected:
-                continue
-                
-            projection = self.project_3d_to_fpv(target.position)
-            if projection is None:
-                continue
-                
-            screen_x, screen_y, depth = projection
+        if DebugConfig.SHOW_SPEED_DEBUG:
+            speed_text = self.font_small.render(f"Speed: {self.drone.get_speed_kmh():.1f} km/h", True, self.GREEN)
+            self.screen.blit(speed_text, (10, debug_y))
+            debug_y += line_height
             
-            # Check if target is close to crosshair
-            distance_to_crosshair = math.sqrt((screen_x - center_x)**2 + (screen_y - center_y)**2)
+            max_speed_text = self.font_small.render(f"Max: {self.drone.max_speed_achieved:.1f} km/h", True, self.YELLOW)
+            self.screen.blit(max_speed_text, (10, debug_y))
+            debug_y += line_height
+        
+        if DebugConfig.SHOW_POSITION_DEBUG:
+            pos_text = self.font_small.render(f"Position: ({self.drone.position.x:.0f}, {self.drone.position.y:.0f}, {self.drone.position.z:.0f})", True, self.WHITE)
+            self.screen.blit(pos_text, (10, debug_y))
+            debug_y += line_height
             
-            # Scale collection radius based on distance
-            scale_factor = max(0.2, 100.0 / depth) if depth > 0 else 0
-            collection_radius = target.radius * scale_factor
-            
-            # Collection if target is centered in crosshair AND close enough
-            if distance_to_crosshair < collection_radius and depth < 30:
-                target.collected = True
-                return target
-                
-        return None
+            alt_text = self.font_small.render(f"Altitude: {self.physics.get_altitude_from_world_y(self.drone.position.y):.1f}m", True, self.WHITE)
+            self.screen.blit(alt_text, (10, debug_y))  # Changed pos_text to alt_text
+            debug_y += line_height
 
     def draw_fpv_ground(self):
-        """Draw ground plane in first-person view with proper altitude consideration"""
-        # Calculate actual altitude (distance from ground)
-        actual_altitude = max(0, 600 - self.drone.position.y)
+        """Use unified horizon calculation"""
+        # Get actual altitude using physics manager
+        actual_altitude = self.physics.get_altitude_from_world_y(self.drone.position.y)
         
-        # Base horizon position from pitch
-        pitch_offset = int(self.drone.rotation.x * 5)
+        # Calculate horizon using unified system
+        horizon_y = self.physics.calculate_horizon_position(
+            self.drone.rotation.x, 
+            actual_altitude
+        )
         
-        # FIXED: Much stronger altitude effect
-        # At 800m altitude, ground should be barely visible
-        # At ground level (altitude=0), ground fills most of screen
-        altitude_factor = actual_altitude / 100.0  # More sensitive to altitude changes
-        altitude_offset = int(altitude_factor * 150)  # Stronger offset effect
-        
-        # Combined horizon calculation
-        horizon_y = (self.HEIGHT // 2) + pitch_offset + altitude_offset
-        
-        # CRITICAL: Ensure horizon moves dramatically with altitude
-        # At 800m, horizon should be near bottom of screen
-        # At 0m, horizon should be in middle/upper area
-        if actual_altitude > 400:  # High altitude
-            horizon_y = max(self.HEIGHT - 100, horizon_y)  # Force ground to bottom
-        elif actual_altitude < 50:  # Very low altitude
-            horizon_y = min(self.HEIGHT // 3, horizon_y)  # Force ground higher up
-        
-        # Ensure horizon stays within bounds but allow more extreme positions
-        horizon_y = max(50, min(self.HEIGHT - 10, horizon_y))
-        
-        # Sky (above horizon) - gradient gets more visible at higher altitudes
+        # Sky (above horizon)
         if horizon_y > 0:
             for y in range(min(horizon_y, self.HEIGHT)):
-                # Sky gradient - deeper blue at higher altitudes
                 altitude_intensity = min(actual_altitude / 300.0, 1.0)
                 color_ratio = y / max(1, horizon_y)
                 
-                # Base sky color gets deeper with altitude
                 base_r = int(135 - (altitude_intensity * 50))
                 base_g = int(206 - (altitude_intensity * 30))
                 base_b = int(235 - (altitude_intensity * 20))
@@ -606,16 +528,15 @@ class FPVSimulator:
                 
                 pygame.draw.line(self.screen, (r, g, b), (0, y), (self.WIDTH, y))
         
-        # Ground (below horizon) - only draw if visible
+        # Ground (below horizon)
         if horizon_y < self.HEIGHT:
             ground_rect = pygame.Rect(0, max(0, horizon_y), self.WIDTH, self.HEIGHT - max(0, horizon_y))
             
-            # Ground color varies with distance/altitude
-            if actual_altitude < 50:  # Very low altitude - bright green
+            if actual_altitude < 50:
                 ground_color = (34, 139, 34)
-            elif actual_altitude < 150:  # Medium altitude - darker green
+            elif actual_altitude < 150:
                 ground_color = (20, 100, 20)
-            else:  # High altitude - very dark, distant ground
+            else:
                 ground_color = (10, 60, 10)
                 
             pygame.draw.rect(self.screen, ground_color, ground_rect)
@@ -629,9 +550,7 @@ class FPVSimulator:
                                     (i, texture_y), (i + 20, texture_y), 1)
 
     def draw_fpv_obstacles(self):
-        """Draw obstacles in first-person view"""
-        # DISABLED FOR TESTING - uncomment when needed  
-        """
+        """Draw obstacles using unified projection"""
         for obstacle in self.current_scenario.obstacles:
             projection = self.project_3d_to_fpv(obstacle.position)
             if projection is None:
@@ -643,27 +562,20 @@ class FPVSimulator:
             if screen_x < -100 or screen_x > self.WIDTH + 100 or screen_y < -100 or screen_y > self.HEIGHT + 100:
                 continue
                 
-            # Scale based on distance
-            if depth <= 0:
-                continue
-                
-            scale_factor = max(0.1, 200.0 / depth)
+            # Use physics manager for consistent scaling
+            scale_factor = self.physics.get_distance_scale_factor(depth, 200.0)
             width = max(1, int(obstacle.width * scale_factor))
             height = max(1, int(obstacle.height * scale_factor))
             
-            # Skip tiny distant objects
             if width < 2 or height < 2:
                 continue
                 
-            # Draw obstacle
             obstacle_rect = pygame.Rect(screen_x - width//2, screen_y - height//2, width, height)
             if obstacle_rect.colliderect(pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)):
                 pygame.draw.rect(self.screen, obstacle.color, obstacle_rect)
-        """
-        pass
 
     def draw_fpv_targets(self):
-        """Draw targets in first-person view"""
+        """Draw targets using unified projection"""
         for target in self.current_scenario.targets:
             if target.collected:
                 continue
@@ -678,23 +590,12 @@ class FPVSimulator:
             if screen_x < -50 or screen_x > self.WIDTH + 50 or screen_y < -50 or screen_y > self.HEIGHT + 50:
                 continue
                 
-            # Scale based on distance
-            if depth <= 0:
-                continue
-                
-            scale_factor = max(0.2, 100.0 / depth)
+            # Use physics manager for consistent scaling
+            scale_factor = self.physics.get_distance_scale_factor(depth, 100.0)
             radius = max(3, int(target.radius * scale_factor))
             
-            # Draw target
             pygame.draw.circle(self.screen, target.color, (screen_x, screen_y), radius)
             pygame.draw.circle(self.screen, (255, 255, 255), (screen_x, screen_y), radius, 2)
-    
-    def check_ground_collision(self):
-        """Check ground collision using consistent coordinate system"""
-        # Ground is at Y=600, crash slightly above at Y=590
-        if self.drone.position.y >= 590:
-            return True
-        return False
 
     def log_debug_data(self, throttle):
         """Log debug data to file for analysis - every 10th frame only"""
@@ -703,7 +604,7 @@ class FPVSimulator:
         # Only log every 10th frame to reduce file size
         if self.debug_frame_counter % 10 == 0:
             current_time = time.time() - self.current_scenario.start_time
-            actual_altitude = max(0, 600 - self.drone.position.y)
+            actual_altitude = self.physics.get_altitude_from_world_y(self.drone.position.y)
             
             debug_line = f"{current_time:.2f},{throttle:.2f},{self.drone.get_speed_kmh():.1f},{actual_altitude:.1f},{self.drone.position.y:.1f},{self.drone.crashed},{self.drone.rotation.x:.1f},{self.drone.rotation.z:.1f},{self.drone.rotation.y:.1f}\n"
             self.debug_file.write(debug_line)
@@ -721,6 +622,9 @@ class FPVSimulator:
         print("Configure drone parameters before starting simulation")
         print("Debug data will be logged to drone_debug.txt")
         
+        # Print debug configuration status
+        DebugConfig.print_active_flags()
+        
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -733,22 +637,27 @@ class FPVSimulator:
                     elif self.game_state == "FLYING":
                         if event.key == pygame.K_r:
                             # Reset current scenario
-                            self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
+                            spawn_y = DebugConfig.SAFE_SPAWN_ALTITUDE if DebugConfig.is_testing_mode() else 300
+                            self.drone = FPVDrone(100, spawn_y, 0, self.max_speed_kmh, self.max_range_km)
                             self.current_scenario = self.create_scenario_by_environment()
                             self.score = 0
-                            print(f"FPV scenario reset - Environment: {self.environment_type.title()}")
+                            if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                                print(f"FPV scenario reset - Environment: {self.environment_type.title()}")
                             
                         elif event.key == pygame.K_ESCAPE:
                             # Return to configuration
                             self.game_state = "CONFIGURATION"
-                            print("Returning to configuration screen")
+                            if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                                print("Returning to configuration screen")
                             
                         elif event.key == pygame.K_SPACE and self.drone.crashed:
-                            # FIXED: Only restart when crashed
-                            self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
+                            # Quick restart when crashed
+                            spawn_y = DebugConfig.SAFE_SPAWN_ALTITUDE if DebugConfig.is_testing_mode() else 300
+                            self.drone = FPVDrone(100, spawn_y, 0, self.max_speed_kmh, self.max_range_km)
                             self.current_scenario = self.create_scenario_by_environment()
                             self.score = 0
-                            print("Quick restart - drone respawned")
+                            if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                                print("Quick restart - drone respawned")
             
             if self.game_state == "CONFIGURATION":
                 self.draw_configuration_screen()
@@ -756,6 +665,17 @@ class FPVSimulator:
             elif self.game_state == "FLYING":
                 # Process controls and update physics
                 throttle, yaw, pitch, roll = self.process_emg_controls()
+                
+                # Apply debug auto-throttle if enabled
+                if DebugConfig.AUTO_THROTTLE and not self.drone.crashed:
+                    throttle = 1.0
+                
+                # Normalize inputs using physics manager
+                throttle = self.physics.normalize_control_input(throttle)
+                yaw = self.physics.normalize_control_input(yaw)
+                pitch = self.physics.normalize_control_input(pitch)
+                roll = self.physics.normalize_control_input(roll)
+                
                 self.drone.update_physics(throttle, yaw, pitch, roll, emg_signals)
                 
                 # Log debug data every frame
@@ -765,45 +685,51 @@ class FPVSimulator:
                 self.camera_position = self.drone.position
                 self.camera_rotation = self.drone.rotation
                 
-                # Check collisions using TRUE FPV collision detection
+                # Check collisions using unified collision detection (with debug overrides)
                 if self.check_fpv_collision():
                     self.drone.crashed = True
-                    print("CRASH: Flew into obstacle!")
+                    if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                        print("CRASH: Flew into obstacle!")
                 
-                # Check ground collision using consistent coordinate system
+                # Check ground collision using unified coordinate system (with debug override)
                 if self.check_ground_collision():
                     self.drone.crashed = True
-                    print("CRASH: Hit the ground!")
+                    if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                        print("CRASH: Hit the ground!")
                 
-                # Check target collection using TRUE FPV detection
+                # Check target collection using unified detection
                 collected_target = self.check_fpv_target_collection()
                 if collected_target:
                     self.score += 10
-                    print(f"Checkpoint collected at {self.drone.get_speed_kmh():.0f} km/h! Score: {self.score}")
+                    if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                        print(f"Checkpoint collected at {self.drone.get_speed_kmh():.0f} km/h! Score: {self.score}")
                 
                 # Check scenario completion
                 if self.current_scenario.check_completion(self.drone):
-                    print(f"Mission completed! Final score: {self.score}")
-                    print(f"Environment: {self.environment_type.title()}")
-                    if hasattr(self.drone, 'max_speed_achieved'):
-                        print(f"Maximum speed achieved: {self.drone.max_speed_achieved:.0f} km/h")
-                    if hasattr(self.drone, 'get_total_distance_km'):
-                        print(f"Total distance traveled: {self.drone.get_total_distance_km():.2f} km")
+                    if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                        print(f"Mission completed! Final score: {self.score}")
+                        print(f"Environment: {self.environment_type.title()}")
+                        if hasattr(self.drone, 'max_speed_achieved'):
+                            print(f"Maximum speed achieved: {self.drone.max_speed_achieved:.0f} km/h")
+                        if hasattr(self.drone, 'get_total_distance_km'):
+                            print(f"Total distance traveled: {self.drone.get_total_distance_km():.2f} km")
                 
                 # Check mission failure conditions
                 elapsed_time = time.time() - self.current_scenario.start_time
-                if elapsed_time > self.current_scenario.time_limit or self.drone.battery <= 0:
+                if elapsed_time > self.current_scenario.time_limit or (self.drone.battery <= 0 and not DebugConfig.DISABLE_BATTERY_DRAIN):
                     if not self.drone.crashed:
                         self.drone.crashed = True
-                        print("Mission failed: Time/battery exhausted")
+                        if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                            print("Mission failed: Time/battery exhausted")
                 
-                # Check range limit
-                if hasattr(self.drone, 'get_range_from_start_km'):
+                # Check range limit (with debug override)
+                if not DebugConfig.DISABLE_RANGE_LIMITS and hasattr(self.drone, 'get_range_from_start_km'):
                     range_percentage = (self.drone.get_range_from_start_km() / self.drone.max_range_km) * 100
                     if range_percentage > 95:
                         if not self.drone.crashed:
                             self.drone.crashed = True
-                            print("Mission failed: Maximum range exceeded")
+                            if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                                print("Mission failed: Maximum range exceeded")
                 
                 # Draw TRUE FIRST-PERSON VIEW
                 self.screen.fill(self.BLACK)
@@ -811,6 +737,9 @@ class FPVSimulator:
                 self.draw_fpv_obstacles()     # Obstacles with true perspective
                 self.draw_fpv_targets()       # Targets with proper distance scaling
                 self.draw_hud()               # HUD overlay
+                
+                # Draw debug info overlay
+                self.draw_debug_info()
             
             pygame.display.flip()
             clock.tick(60)
@@ -820,12 +749,14 @@ class FPVSimulator:
         breaking_case = True
         if ARDUINO_MODE and ser:
             ser.close()
-            print("Arduino connection closed")
+            if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                print("Arduino connection closed")
         
         # Close debug file
         if hasattr(self, 'debug_file'):
             self.debug_file.close()
-            print("Debug data saved to drone_debug.txt")
+            if DebugConfig.VERBOSE_CONSOLE_OUTPUT:
+                print("Debug data saved to drone_debug.txt")
         
         pygame.quit()
 

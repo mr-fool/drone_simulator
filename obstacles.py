@@ -1,4 +1,6 @@
 from vector3 import Vector3
+from config import DebugConfig
+
 import math
 import pygame
 import random
@@ -128,101 +130,137 @@ class EnvironmentGenerator:
     @staticmethod
     def create_building_course():
         """Urban racing course with buildings and skyscrapers"""
-        obstacles = [
-            # Downtown skyscrapers
-            Obstacle(200, 300, 50, 40, 200, 40, "skyscraper"),
-            Obstacle(300, 250, -30, 35, 180, 35, "building"),
-            Obstacle(450, 350, 40, 45, 220, 40, "skyscraper"),
-            Obstacle(600, 280, -20, 38, 190, 38, "building"),
-            Obstacle(750, 320, 60, 42, 210, 42, "tower"),
-            
-            # Medium buildings for variety
-            Obstacle(150, 400, 20, 30, 120, 30, "warehouse"),
-            Obstacle(400, 450, -50, 32, 140, 32, "building"),
-            Obstacle(650, 200, 30, 35, 160, 35, "warehouse"),
-            Obstacle(850, 380, -40, 40, 180, 40, "building"),
-        ]
+        # Check debug flags first
+        if DebugConfig.EMPTY_ENVIRONMENT or DebugConfig.DISABLE_OBSTACLES:
+            obstacles = []
+        else:
+            obstacles = [
+                # Downtown skyscrapers
+                Obstacle(200, 300, 50, 40, 200, 40, "skyscraper"),
+                Obstacle(300, 250, -30, 35, 180, 35, "building"),
+                Obstacle(450, 350, 40, 45, 220, 40, "skyscraper"),
+                Obstacle(600, 280, -20, 38, 190, 38, "building"),
+                Obstacle(750, 320, 60, 42, 210, 42, "tower"),
+                
+                # Medium buildings for variety
+                Obstacle(150, 400, 20, 30, 120, 30, "warehouse"),
+                Obstacle(400, 450, -50, 32, 140, 32, "building"),
+                Obstacle(650, 200, 30, 35, 160, 35, "warehouse"),
+                Obstacle(850, 380, -40, 40, 180, 40, "building"),
+            ]
         
-        targets = [
-            # Urban checkpoint gates
-            Target(120, 200, 10, 18, "gate"),
-            Target(280, 180, -10, 18, "checkpoint"),
-            Target(480, 200, 20, 18, "gate"),
-            Target(680, 160, -15, 18, "checkpoint"),
-            Target(820, 190, 25, 18, "gate"),
-            Target(950, 180, 0, 18, "checkpoint"),
-        ]
+        # Check target debug flags
+        if DebugConfig.EMPTY_ENVIRONMENT or DebugConfig.DISABLE_TARGETS:
+            targets = []
+        else:
+            targets = [
+                # Urban checkpoint gates
+                Target(120, 200, 10, 18, "gate"),
+                Target(280, 180, -10, 18, "checkpoint"),
+                Target(480, 200, 20, 18, "gate"),
+                Target(680, 160, -15, 18, "checkpoint"),
+                Target(820, 190, 25, 18, "gate"),
+                Target(950, 180, 0, 18, "checkpoint"),
+            ]
         
-        return obstacles, targets, "Urban Racing Circuit"
+        course_name = "Urban Racing Circuit"
+        if DebugConfig.EMPTY_ENVIRONMENT:
+            course_name += " (EMPTY - TESTING)"
+        
+        return obstacles, targets, course_name
     
     @staticmethod
     def create_forest_course():
         """Natural forest course with trees and organic obstacles"""
-        obstacles = [
-            # Large tree clusters
-            Obstacle(180, 450, 30, 25, 80, 25, "tree"),
-            Obstacle(220, 420, 50, 28, 90, 28, "pine"),
-            Obstacle(280, 380, 20, 22, 75, 22, "tree"),
-            
-            Obstacle(420, 400, -40, 30, 95, 30, "pine"),
-            Obstacle(480, 430, -20, 26, 85, 26, "tree"),
-            Obstacle(520, 390, -60, 24, 78, 24, "pine"),
-            
-            Obstacle(680, 420, 45, 32, 100, 32, "tree"),
-            Obstacle(720, 390, 25, 28, 88, 28, "pine"),
-            Obstacle(760, 450, 65, 25, 82, 25, "tree"),
-            
-            # Scattered individual trees
-            Obstacle(350, 350, 10, 18, 65, 18, "pine"),
-            Obstacle(550, 320, -30, 20, 70, 20, "tree"),
-            Obstacle(800, 340, 15, 19, 68, 19, "pine"),
-        ]
+        # Check debug flags first
+        if DebugConfig.EMPTY_ENVIRONMENT or DebugConfig.DISABLE_OBSTACLES:
+            obstacles = []
+        else:
+            obstacles = [
+                # Large tree clusters
+                Obstacle(180, 450, 30, 25, 80, 25, "tree"),
+                Obstacle(220, 420, 50, 28, 90, 28, "pine"),
+                Obstacle(280, 380, 20, 22, 75, 22, "tree"),
+                
+                Obstacle(420, 400, -40, 30, 95, 30, "pine"),
+                Obstacle(480, 430, -20, 26, 85, 26, "tree"),
+                Obstacle(520, 390, -60, 24, 78, 24, "pine"),
+                
+                Obstacle(680, 420, 45, 32, 100, 32, "tree"),
+                Obstacle(720, 390, 25, 28, 88, 28, "pine"),
+                Obstacle(760, 450, 65, 25, 82, 25, "tree"),
+                
+                # Scattered individual trees
+                Obstacle(350, 350, 10, 18, 65, 18, "pine"),
+                Obstacle(550, 320, -30, 20, 70, 20, "tree"),
+                Obstacle(800, 340, 15, 19, 68, 19, "pine"),
+            ]
         
-        targets = [
-            # Natural forest rings between trees
-            Target(140, 250, 20, 16, "ring"),
-            Target(310, 200, -5, 16, "beacon"),
-            Target(450, 220, 15, 16, "ring"),
-            Target(620, 180, -25, 16, "beacon"),
-            Target(780, 200, 35, 16, "ring"),
-            Target(920, 190, 5, 16, "beacon"),
-        ]
+        # Check target debug flags
+        if DebugConfig.EMPTY_ENVIRONMENT or DebugConfig.DISABLE_TARGETS:
+            targets = []
+        else:
+            targets = [
+                # Natural forest rings between trees
+                Target(140, 250, 20, 16, "ring"),
+                Target(310, 200, -5, 16, "beacon"),
+                Target(450, 220, 15, 16, "ring"),
+                Target(620, 180, -25, 16, "beacon"),
+                Target(780, 200, 35, 16, "ring"),
+                Target(920, 190, 5, 16, "beacon"),
+            ]
         
-        return obstacles, targets, "Forest Slalom Course"
+        course_name = "Forest Slalom Course"
+        if DebugConfig.EMPTY_ENVIRONMENT:
+            course_name += " (EMPTY - TESTING)"
+        
+        return obstacles, targets, course_name
     
     @staticmethod
     def create_hybrid_course():
         """Mixed environment with buildings and natural obstacles"""
-        obstacles = [
-            # Urban section
-            Obstacle(150, 300, 40, 35, 160, 35, "building"),
-            Obstacle(280, 320, -20, 40, 180, 40, "skyscraper"),
-            
-            # Transition area with scattered elements
-            Obstacle(420, 380, 30, 25, 90, 25, "tree"),
-            Obstacle(480, 350, 50, 38, 170, 38, "tower"),
-            Obstacle(520, 400, 10, 22, 75, 22, "pine"),
-            
-            # Mixed zone
-            Obstacle(650, 300, -40, 32, 150, 32, "warehouse"),
-            Obstacle(720, 420, 20, 28, 85, 28, "tree"),
-            Obstacle(800, 280, 60, 42, 190, 42, "building"),
-            
-            # Natural ending
-            Obstacle(900, 390, -30, 26, 80, 26, "pine"),
-        ]
+        # Check debug flags first
+        if DebugConfig.EMPTY_ENVIRONMENT or DebugConfig.DISABLE_OBSTACLES:
+            obstacles = []
+        else:
+            obstacles = [
+                # Urban section
+                Obstacle(150, 300, 40, 35, 160, 35, "building"),
+                Obstacle(280, 320, -20, 40, 180, 40, "skyscraper"),
+                
+                # Transition area with scattered elements
+                Obstacle(420, 380, 30, 25, 90, 25, "tree"),
+                Obstacle(480, 350, 50, 38, 170, 38, "tower"),
+                Obstacle(520, 400, 10, 22, 75, 22, "pine"),
+                
+                # Mixed zone
+                Obstacle(650, 300, -40, 32, 150, 32, "warehouse"),
+                Obstacle(720, 420, 20, 28, 85, 28, "tree"),
+                Obstacle(800, 280, 60, 42, 190, 42, "building"),
+                
+                # Natural ending
+                Obstacle(900, 390, -30, 26, 80, 26, "pine"),
+            ]
         
-        targets = [
-            # Varied checkpoint types
-            Target(100, 200, 25, 17, "gate"),
-            Target(240, 180, -10, 17, "checkpoint"),
-            Target(450, 200, 35, 17, "ring"),
-            Target(620, 170, -15, 17, "beacon"),
-            Target(750, 190, 40, 17, "gate"),
-            Target(950, 180, 10, 17, "ring"),
-        ]
+        # Check target debug flags
+        if DebugConfig.EMPTY_ENVIRONMENT or DebugConfig.DISABLE_TARGETS:
+            targets = []
+        else:
+            targets = [
+                # Varied checkpoint types
+                Target(100, 200, 25, 17, "gate"),
+                Target(240, 180, -10, 17, "checkpoint"),
+                Target(450, 200, 35, 17, "ring"),
+                Target(620, 170, -15, 17, "beacon"),
+                Target(750, 190, 40, 17, "gate"),
+                Target(950, 180, 10, 17, "ring"),
+            ]
         
-        return obstacles, targets, "Urban-Nature Hybrid Track"
+        course_name = "Urban-Nature Hybrid Track"
+        if DebugConfig.EMPTY_ENVIRONMENT:
+            course_name += " (EMPTY - TESTING)"
+        
+        return obstacles, targets, course_name
 
 class ObstacleRenderer:
     """Enhanced rendering system for different obstacle types"""
