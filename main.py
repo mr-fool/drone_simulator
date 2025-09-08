@@ -111,6 +111,11 @@ class FPVSimulator:
         self.camera_position = Vector3(0, 0, 0)
         self.camera_rotation = Vector3(0, 0, 0)
         
+        # Debug logging
+        self.debug_file = open("drone_debug.txt", "w")
+        self.debug_file.write("Time,Throttle,Speed_kmh,Altitude,Drone_Y,Crashed,Pitch,Roll,Yaw\n")
+        self.debug_frame_counter = 0
+
     def load_images(self):
         """Load all required FPV drone and environment images"""
         self.images = {}
@@ -131,17 +136,17 @@ class FPVSimulator:
             try:
                 if os.path.exists(filename):
                     self.images[key] = pygame.image.load(filename)
-                    print(f"✓ Loaded {filename}")
+                    print(f"Loaded {filename}")
                 else:
                     missing_files.append(filename)
                     self.images[key] = None
             except pygame.error as e:
-                print(f"✗ Error loading {filename}: {e}")
+                print(f"Error loading {filename}: {e}")
                 self.images[key] = None
                 missing_files.append(filename)
         
         if missing_files:
-            print("\n⚠️  Missing image files:")
+            print("\nMissing image files:")
             for file in missing_files:
                 print(f"   - {file}")
             print("The simulator will create placeholder graphics for missing assets\n")
@@ -487,6 +492,7 @@ class FPVSimulator:
 
     def check_fpv_collision(self):
         """Check collision in first-person view using crosshair"""
+        # DISABLED FOR TESTING - uncomment when needed
         """
         center_x, center_y = self.WIDTH // 2, self.HEIGHT // 2
         
@@ -558,17 +564,25 @@ class FPVSimulator:
         # Base horizon position from pitch
         pitch_offset = int(self.drone.rotation.x * 5)
         
-        # Altitude effect: higher altitude = ground appears lower on screen
+        # FIXED: Much stronger altitude effect
+        # At 800m altitude, ground should be barely visible
         # At ground level (altitude=0), ground fills most of screen
-        # At high altitude (altitude=300+), ground appears as thin strip
-        altitude_factor = min(actual_altitude / 200.0, 2.0)  # Cap at 2.0 for very high altitudes
-        altitude_offset = int(altitude_factor * 100)  # More altitude = more offset downward
+        altitude_factor = actual_altitude / 100.0  # More sensitive to altitude changes
+        altitude_offset = int(altitude_factor * 150)  # Stronger offset effect
         
         # Combined horizon calculation
         horizon_y = (self.HEIGHT // 2) + pitch_offset + altitude_offset
         
-        # Ensure horizon stays within reasonable bounds
-        horizon_y = max(self.HEIGHT // 4, min(self.HEIGHT - 50, horizon_y))
+        # CRITICAL: Ensure horizon moves dramatically with altitude
+        # At 800m, horizon should be near bottom of screen
+        # At 0m, horizon should be in middle/upper area
+        if actual_altitude > 400:  # High altitude
+            horizon_y = max(self.HEIGHT - 100, horizon_y)  # Force ground to bottom
+        elif actual_altitude < 50:  # Very low altitude
+            horizon_y = min(self.HEIGHT // 3, horizon_y)  # Force ground higher up
+        
+        # Ensure horizon stays within bounds but allow more extreme positions
+        horizon_y = max(50, min(self.HEIGHT - 10, horizon_y))
         
         # Sky (above horizon) - gradient gets more visible at higher altitudes
         if horizon_y > 0:
@@ -613,8 +627,10 @@ class FPVSimulator:
                     if texture_y < self.HEIGHT:
                         pygame.draw.line(self.screen, (25, 90, 25), 
                                     (i, texture_y), (i + 20, texture_y), 1)
+
     def draw_fpv_obstacles(self):
         """Draw obstacles in first-person view"""
+        # DISABLED FOR TESTING - uncomment when needed  
         """
         for obstacle in self.current_scenario.obstacles:
             projection = self.project_3d_to_fpv(obstacle.position)
@@ -645,7 +661,6 @@ class FPVSimulator:
                 pygame.draw.rect(self.screen, obstacle.color, obstacle_rect)
         """
         pass
-
 
     def draw_fpv_targets(self):
         """Draw targets in first-person view"""
@@ -681,6 +696,19 @@ class FPVSimulator:
             return True
         return False
 
+    def log_debug_data(self, throttle):
+        """Log debug data to file for analysis - every 10th frame only"""
+        self.debug_frame_counter += 1
+        
+        # Only log every 10th frame to reduce file size
+        if self.debug_frame_counter % 10 == 0:
+            current_time = time.time() - self.current_scenario.start_time
+            actual_altitude = max(0, 600 - self.drone.position.y)
+            
+            debug_line = f"{current_time:.2f},{throttle:.2f},{self.drone.get_speed_kmh():.1f},{actual_altitude:.1f},{self.drone.position.y:.1f},{self.drone.crashed},{self.drone.rotation.x:.1f},{self.drone.rotation.z:.1f},{self.drone.rotation.y:.1f}\n"
+            self.debug_file.write(debug_line)
+            self.debug_file.flush()
+
     def run(self):
         """Main game loop for FPV simulator with configuration"""
         clock = pygame.time.Clock()
@@ -691,6 +719,7 @@ class FPVSimulator:
         print("Hardware: BioAmp EXG Pill + Arduino Uno R4")
         print(f"Control Mode: {'EMG Hardware' if ARDUINO_MODE else 'Keyboard Testing'}")
         print("Configure drone parameters before starting simulation")
+        print("Debug data will be logged to drone_debug.txt")
         
         while running:
             for event in pygame.event.get():
@@ -714,8 +743,8 @@ class FPVSimulator:
                             self.game_state = "CONFIGURATION"
                             print("Returning to configuration screen")
                             
-                        elif event.key == pygame.K_SPACE:
-                            # Quick restart when crashed
+                        elif event.key == pygame.K_SPACE and self.drone.crashed:
+                            # FIXED: Only restart when crashed
                             self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
                             self.current_scenario = self.create_scenario_by_environment()
                             self.score = 0
@@ -728,6 +757,9 @@ class FPVSimulator:
                 # Process controls and update physics
                 throttle, yaw, pitch, roll = self.process_emg_controls()
                 self.drone.update_physics(throttle, yaw, pitch, roll, emg_signals)
+                
+                # Log debug data every frame
+                self.log_debug_data(throttle)
                 
                 # Update first-person camera
                 self.camera_position = self.drone.position
@@ -789,6 +821,12 @@ class FPVSimulator:
         if ARDUINO_MODE and ser:
             ser.close()
             print("Arduino connection closed")
+        
+        # Close debug file
+        if hasattr(self, 'debug_file'):
+            self.debug_file.close()
+            print("Debug data saved to drone_debug.txt")
+        
         pygame.quit()
 
 if __name__ == "__main__":

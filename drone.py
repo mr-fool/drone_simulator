@@ -31,6 +31,7 @@ class FPVDrone:
 
     def update_physics(self, throttle, yaw, pitch, roll, emg_signals=None):
         """Update FPV drone physics with user-configurable limits"""
+        print(f"Throttle: {throttle:.2f}, Speed: {self.get_speed_kmh():.1f} km/h")  # Debug line
         if self.crashed:
             return
             
