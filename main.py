@@ -393,7 +393,8 @@ class FPVSimulator:
         else:
             # Keyboard controls for testing
             keys = pygame.key.get_pressed()
-            throttle = 1.0 if keys[pygame.K_SPACE] else 0.0
+            # Only allow throttle if drone is not crashed
+            throttle = 1.0 if (keys[pygame.K_SPACE] and not self.drone.crashed) else 0.0
             yaw = (-0.5 if keys[pygame.K_q] else 0.0) + (0.5 if keys[pygame.K_e] else 0.0)
             
             # FIXED: Inverted pitch control for intuitive flight
@@ -486,6 +487,7 @@ class FPVSimulator:
 
     def check_fpv_collision(self):
         """Check collision in first-person view using crosshair"""
+        """
         center_x, center_y = self.WIDTH // 2, self.HEIGHT // 2
         
         for obstacle in self.current_scenario.obstacles:
@@ -517,7 +519,7 @@ class FPVSimulator:
             # 2. Drone is actually close to obstacle in 3D space
             if distance_to_crosshair < collision_radius and actual_3d_distance < 40:
                 return True
-                
+        """        
         return False
 
     def check_fpv_target_collection(self):
@@ -613,6 +615,7 @@ class FPVSimulator:
                                     (i, texture_y), (i + 20, texture_y), 1)
     def draw_fpv_obstacles(self):
         """Draw obstacles in first-person view"""
+        """
         for obstacle in self.current_scenario.obstacles:
             projection = self.project_3d_to_fpv(obstacle.position)
             if projection is None:
@@ -640,6 +643,9 @@ class FPVSimulator:
             obstacle_rect = pygame.Rect(screen_x - width//2, screen_y - height//2, width, height)
             if obstacle_rect.colliderect(pygame.Rect(0, 0, self.WIDTH, self.HEIGHT)):
                 pygame.draw.rect(self.screen, obstacle.color, obstacle_rect)
+        """
+        pass
+
 
     def draw_fpv_targets(self):
         """Draw targets in first-person view"""
@@ -708,7 +714,7 @@ class FPVSimulator:
                             self.game_state = "CONFIGURATION"
                             print("Returning to configuration screen")
                             
-                        elif event.key == pygame.K_SPACE and self.drone.crashed:
+                        elif event.key == pygame.K_SPACE:
                             # Quick restart when crashed
                             self.drone = FPVDrone(100, 300, 0, self.max_speed_kmh, self.max_range_km)
                             self.current_scenario = self.create_scenario_by_environment()

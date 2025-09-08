@@ -18,7 +18,8 @@ class FPVHUDSystem:
         self.GRAY = (128, 128, 128)
         self.DARK_GRAY = (64, 64, 64)
         self.BLACK = (0, 0, 0)
-        
+        self.BROWN = (139, 69, 19)  # Ground/earth color
+
         # Fonts
         self.font_large = pygame.font.Font(None, 48)
         self.font_medium = pygame.font.Font(None, 32)
@@ -81,20 +82,19 @@ class FPVHUDSystem:
         # Create a surface for the horizon
         horizon_surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
         
-        # Fill entire surface with brown ground
-        pygame.draw.circle(horizon_surface, (139, 69, 19), (size, size), size)  # Ground color
+        # Fill entire surface with sky first
+        pygame.draw.circle(horizon_surface, self.BLUE, (size, size), size)  # sky color
 
         # Calculate horizon line position based on pitch
-        horizon_y = size - (pitch * 3)  # Negative because up pitch should show more sky
+        horizon_y = size + (pitch * 3)  # Negative because up pitch should show more sky
 
-        # Draw sky portion above horizon line - but only within the circle
+        # Draw ground portion BELOW horizon line (from horizon_y to bottom)
         for x in range(size * 2):
-            for y in range(0, int(horizon_y)):
+            for y in range(int(horizon_y), size * 2):  # Changed: from horizon_y to bottom
                 # Check if this pixel is within the circle
                 dist = math.sqrt((x - size) ** 2 + (y - size) ** 2)
                 if dist <= size:
-                    horizon_surface.set_at((x, y), self.BLUE)  # Sky color
-        
+                    horizon_surface.set_at((x, y), self.BROWN)  # ground color
         
         # Draw horizon line
         pygame.draw.line(horizon_surface, self.WHITE, (0, horizon_y), (size * 2, horizon_y), 3)
