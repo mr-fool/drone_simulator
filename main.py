@@ -95,6 +95,9 @@ class FPVSimulator:
     def __init__(self):
         pygame.init()
         
+        # Create data directories
+        self.create_data_directories()
+
         # Print debug status
         DebugConfig.print_research_status()
 
@@ -162,9 +165,26 @@ class FPVSimulator:
         self.camera_rotation = Vector3(0, 0, 0)
         
         # Debug logging
-        self.debug_file = open(f"research_debug_{self.research_session_id}.txt", "w")
+        debug_folder = "data_output/debug_logs"  # Instead of just "data_output"
+        self.debug_file = open(f"{debug_folder}/research_debug_{self.research_session_id}.txt", "w")
         self.debug_file.write("Time,Throttle,Yaw,Pitch,Roll,Speed_kmh,Altitude,EMG_Quality,Fatigue_Level\n")
         self.debug_frame_counter = 0
+
+    def create_data_directories(self):
+        """Create directories for organized data storage"""
+        import os
+        
+        directories = [
+            "data_output",
+            "data_output/debug_logs",
+            "data_output/emg_data", 
+            "data_output/reports"
+        ]
+        
+        for directory in directories:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                print(f"Created directory: {directory}")
 
     def load_images(self):
         """Load optional images for research mode"""
@@ -503,7 +523,11 @@ class FPVSimulator:
 
     def save_evaluation_report(self, report):
         """Save research evaluation report"""
-        filename = f"emg_research_report_{self.research_session_id}.json"
+        
+        # Ensure reports directory exists
+        os.makedirs("data_output/reports", exist_ok=True)
+
+        filename = f"data_output/reports/emg_research_report_{self.research_session_id}.json"
         with open(filename, 'w') as f:
             serializable_report = {}
             for key, value in report.items():

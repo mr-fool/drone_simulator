@@ -4,6 +4,7 @@ import time
 import csv
 from collections import deque
 import math
+import os
 
 class EMGEvaluationSystem:
     """
@@ -59,7 +60,10 @@ class EMGEvaluationSystem:
         if session_id is None:
             session_id = time.strftime("%Y%m%d_%H%M%S")
         
-        filename = f"emg_evaluation_{session_id}.csv"
+        # Ensure directory exists
+        os.makedirs("data_output/emg_data", exist_ok=True)
+
+        filename = f"data_output/emg_data/emg_evaluation_{session_id}.csv"  # Fixed path
         self.emg_log_file = open(filename, 'w', newline='')
         writer = csv.writer(self.emg_log_file)
         

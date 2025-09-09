@@ -1,22 +1,22 @@
-# EMG-Controlled Drone Training Simulator
+# EMG Flight Control Research Platform
 
 **Research Platform for HardwareX Journal Publication**
 
-An innovative drone training simulator controlled by electromyography (EMG) signals using the BioAmp EXG Pill sensor and Arduino Uno R4. This system enables muscle-based drone control for research into human-machine interfaces and accessible drone operation.
+An EMG-controlled flight simulator using the BioAmp EXG Pill sensor and Arduino Uno R4 for research into muscle signal-based human-machine interfaces. This platform enables validation of electromyography signals for real-time flight control applications.
 
 ## Research Objectives
 
-- **EMG-Based Drone Control**: Demonstrate feasibility of muscle signal-based drone operation
-- **Hardware Integration**: Validate low-cost EMG acquisition system for real-time control
+- **EMG Signal Validation**: Demonstrate feasibility of muscle signal-based flight control
+- **Hardware Integration**: Validate low-cost EMG acquisition system for real-time applications
 - **Control System Development**: Design and implement EMG-to-flight command mapping
 - **Performance Characterization**: Measure system response time, accuracy, and signal quality
 
 ## Hardware Requirements
 
 ### Core Components
-- **Arduino Uno R4** (or compatible)
+- **Arduino Uno R4** (or compatible microcontroller)
 - **BioAmp EXG Pill** - 4-channel EMG acquisition module
-- **EMG Electrodes** - 8 electrodes (2 per muscle group)
+- **EMG Electrodes** - 8 disposable Ag/AgCl electrodes (2 per muscle group)
 - **USB Cable** - Arduino to PC connection
 
 ### EMG Sensor Placement (Single Arm Configuration)
@@ -26,21 +26,21 @@ Right Arm EMG Sensor Placement:
                                     
     Shoulder                        
         |                           
-        |   [A2] ← Bicep Brachii (Pitch Control)
+        |   [A2] - Bicep Brachii (Pitch Control)
         |    ●●                     
     Upper Arm                       
         |    ●●                     
-        |   [A3] ← Tricep Brachii (Roll Control)
+        |   [A3] - Tricep Brachii (Roll Control)
         |                           
     ────┴────                       
      Elbow                          
     ────┬────                       
         |                           
-        |   [A1] ← Forearm Extensor (Yaw Control)
+        |   [A1] - Forearm Extensor (Yaw Control)
         |    ●●                     
     Forearm                         
         |    ●●                     
-        |   [A0] ← Forearm Flexor (Throttle Control)
+        |   [A0] - Forearm Flexor (Throttle Control)
         |                           
     ────┴────                       
      Wrist                          
@@ -48,10 +48,10 @@ Right Arm EMG Sensor Placement:
       Hand                          
 
 EMG Channel Mapping:
-• A0 (Throttle): Forearm flexor muscles → Wrist flexion movement
-• A1 (Yaw): Forearm extensor muscles → Wrist extension movement  
-• A2 (Pitch): Bicep brachii → Elbow flexion movement
-• A3 (Roll): Tricep brachii → Elbow extension movement
+• A0 (Throttle): Forearm flexor muscles - Wrist flexion movement
+• A1 (Yaw): Forearm extensor muscles - Wrist extension movement  
+• A2 (Pitch): Bicep brachii - Elbow flexion movement
+• A3 (Roll): Tricep brachii - Elbow extension movement
 
 Electrode Placement Notes:
 - Place electrodes (●●) over muscle belly for maximum signal
@@ -63,17 +63,30 @@ Electrode Placement Notes:
 ## Project Structure
 
 ```
-drone_simulator/
-├── main.py                 # Main simulator application
-├── arduino_emg_control.ino # Arduino EMG acquisition code
-├── README.md              # This documentation
-├── requirements.txt       # Python dependencies
-└── images/                # Required visual assets
-    ├── sky_background.png # Sky background image
-    ├── ground_texture.png # Ground surface texture
-    ├── building.png       # Obstacle building texture
-    ├── checkpoint.png     # Target checkpoint icon
-    └── hud_overlay.png    # Instrument panel graphics (optional)
+emg_drone_research/
+├── main.py                           # Main research application
+├── arduino_emg_code.ino             # Arduino EMG acquisition code
+├── README.md                         # Documentation
+├── requirements.txt                  # Python dependencies
+│
+├── core_systems/
+│   ├── drone.py                      # Drone physics simulation
+│   ├── vector3.py                    # 3D vector mathematics
+│   ├── physics_manager.py            # Physics and collision detection
+│   ├── fpv_hud_system.py            # HUD display system
+│   └── config.py                     # Core system configuration
+│
+├── research_modules/
+│   ├── config.py                     # Research configuration
+│   ├── research_config_ui.py         # Simplified configuration interface
+│   ├── research_obstacles.py         # Target waypoints (no obstacles)
+│   ├── emg_evaluation_system.py      # EMG signal analysis
+│   └── emg_calibration_ui.py         # EMG calibration interface
+│
+└── data_output/                      # Generated during sessions
+    ├── debug_logs/                   # Flight performance data
+    ├── emg_data/                     # EMG signal recordings
+    └── reports/                      # Analysis reports
 ```
 
 ## Installation & Setup
@@ -81,13 +94,24 @@ drone_simulator/
 ### 1. Python Environment Setup
 ```bash
 # Create virtual environment
-python -m venv drone_sim_env
-source drone_sim_env/bin/activate  # Linux/Mac
+python -m venv emg_research_env
+source emg_research_env/bin/activate  # Linux/Mac
 # or
-drone_sim_env\Scripts\activate     # Windows
+emg_research_env\Scripts\activate     # Windows
 
 # Install dependencies
 pip install pygame pyserial numpy
+```
+
+### 2. Hardware Configuration
+In `main.py`, configure hardware settings:
+```python
+# Set to True when Arduino is connected
+ARDUINO_MODE = False  # Change to True for hardware mode
+
+# Arduino connection settings
+arduino_port = 'COM3'    # Update for your system (Windows) or '/dev/ttyUSB0' (Linux)
+baud_rate = 115200
 ```
 
 ## Hardware Setup
@@ -107,7 +131,7 @@ OUT4            →  A3 (Roll)
 ### EMG Electrode Preparation and Placement
 
 #### Required Materials
-- 8 Ag/AgCl EMG electrodes (disposable)
+- Additional Ag/AgCl EMG electrodes (disposable) - BioAmp EXG Pill includes 4, you need 8 total
 - 4 EMG electrode cables (3-lead configuration)
 - Isopropyl alcohol (70% minimum)
 - Cotton pads or alcohol wipes
@@ -124,29 +148,25 @@ OUT4            →  A3 (Roll)
 **Channel A0 - Forearm Flexor (Throttle Control)**
 - Position: Ventral forearm, 1/3 distance from wrist to elbow
 - Muscle: Flexor carpi radialis and palmaris longus
-- Placement: Two electrodes 2cm apart over muscle belly
-- Reference: Place reference electrode on wrist bone (radial styloid)
+- Placement: Two electrodes from single cable over muscle belly (differential measurement)
 
 **Channel A1 - Forearm Extensor (Yaw Control)**
 - Position: Dorsal forearm, 1/3 distance from wrist to elbow  
 - Muscle: Extensor carpi radialis longus/brevis
-- Placement: Two electrodes 2cm apart over muscle belly
-- Reference: Use same wrist bone reference as A0
+- Placement: Two electrodes from single cable over muscle belly (differential measurement)
 
 **Channel A2 - Bicep Brachii (Pitch Control)**
 - Position: Anterior upper arm, muscle belly center
 - Muscle: Bicep brachii (long head)
-- Placement: Two electrodes 2cm apart along muscle fiber direction
-- Reference: Place reference electrode on lateral epicondyle (elbow)
+- Placement: Two electrodes from single cable along muscle fiber direction (differential measurement)
 
 **Channel A3 - Tricep Brachii (Roll Control)**
 - Position: Posterior upper arm, lateral head of tricep
 - Muscle: Tricep brachii (lateral head)
-- Placement: Two electrodes 2cm apart along muscle fiber direction  
-- Reference: Use same elbow reference as A2
+- Placement: Two electrodes from single cable along muscle fiber direction (differential measurement)
 
 #### Connection Verification
-1. **Arduino Setup**: Upload `arduino_emg_control.ino` to Arduino Uno R4
+1. **Arduino Setup**: Upload `arduino_emg_code.ino` to Arduino Uno R4
 2. **Serial Monitor**: Open Arduino IDE Serial Monitor (115200 baud)
 3. **Signal Test**: Flex each muscle group individually
 4. **Expected Output**: Four comma-separated values updating in real-time
@@ -158,7 +178,7 @@ OUT4            →  A3 (Roll)
 ```bash
 1. Connect Arduino Uno R4 to computer via USB
 2. Open Arduino IDE
-3. Load arduino_emg_control.ino
+3. Load arduino_emg_code.ino
 4. Select correct board: Arduino Uno R4 WiFi (or Minima)
 5. Select correct COM port
 6. Upload sketch to Arduino
@@ -189,191 +209,202 @@ OUT4            →  A3 (Roll)
 4. Run initial calibration to determine EMG thresholds
 ```
 
-### Calibration Process
+## Running the Research Platform
 
-#### EMG Signal Calibration
-```python
-# Calibration procedure in main.py
-1. Rest Position: Record EMG signals at complete muscle relaxation
-2. Maximum Voluntary Contraction (MVC): Record peak EMG for each muscle
-3. Threshold Setting: Set activation threshold at 20-30% of MVC
-4. Range Mapping: Map EMG range to control inputs (0-100%)
+### Testing Mode (No Hardware Required)
+```bash
+python main.py
 ```
+- **Controls**: WASD (pitch/roll), Space (throttle), QE (yaw), R (reset)
+- **View**: First-person flight perspective
+- **Environment**: Empty space for pure flight physics testing
+- **Data Collection**: Simulated EMG signals for algorithm development
 
-#### Control Sensitivity Adjustment
-- **emg_threshold**: Minimum signal level to register as intentional control
-- **emg_max**: Maximum expected signal level for full control authority  
-- **Fine-tuning**: Adjust values based on individual muscle strength and signal quality
+### Hardware Mode (With EMG Sensors)
+1. Connect Arduino with EMG sensors
+2. Set `ARDUINO_MODE = True` in main.py
+3. Update `arduino_port` if needed
+4. Run platform: `python main.py`
+5. Complete EMG calibration process
+6. Begin research flight sessions with muscle control
 
-### Troubleshooting Hardware Issues
+## Research Configuration Options
 
-#### Poor EMG Signal Quality
-- **Check skin preparation**: Re-clean with alcohol, ensure dry skin
-- **Electrode contact**: Press electrodes firmly, check for air bubbles
-- **Cable connections**: Verify secure connections to BioAmp inputs
-- **Muscle activation**: Ensure proper muscle contraction technique
+The platform provides simplified configuration focused on research parameters:
 
-#### Arduino Connection Problems  
-- **COM port**: Verify correct port selection in Device Manager (Windows)
-- **USB cable**: Test with known good USB cable, try different ports
-- **Driver installation**: Install Arduino drivers if not automatically recognized
-- **Power supply**: Ensure Arduino receives adequate USB power (500mA minimum)
+### Flight Parameters
+- **Conservative (120 km/h)**: Stable flight for initial EMG testing
+- **Standard (150 km/h)**: Balanced performance for training
+- **High Performance (180 km/h)**: Racing characteristics for advanced testing
 
-#### BioAmp EXG Pill Issues
-- **Power verification**: Check 3.3V supply voltage with multimeter
-- **Ground connection**: Ensure solid GND connection between Arduino and BioAmp
-- **Channel isolation**: Test each EMG channel individually for proper function
-- **Signal saturation**: Reduce input signal if readings consistently at maximum
+### Range Configuration
+- **Short Range (2 km)**: Close-proximity testing
+- **Medium Range (5 km)**: Standard research range
 
-### Safety Considerations
+### Research Environment
+- **Obstacles**: DISABLED (research focus)
+- **Ground Collision**: ENABLED (primary challenge)
+- **Navigation Targets**: OPTIONAL
+- **Physics**: Realistic flight dynamics
+- **Data Logging**: Comprehensive EMG + flight data
 
-#### Electrical Safety
-- Use only USB-powered Arduino (isolated from mains power)
-- Verify BioAmp EXG Pill is designed for human EMG measurement
-- Do not modify circuit connections while electrodes are attached
-- Disconnect electrodes before making any hardware changes
+## EMG Calibration Process
 
-#### Biological Safety  
+The platform includes a structured calibration workflow:
+
+### Calibration Steps
+1. **Baseline Calibration**: Record muscle relaxation state (10 seconds)
+2. **Throttle Calibration**: Maximum forearm flexor contraction (5 seconds)
+3. **Yaw Calibration**: Maximum forearm extensor contraction (5 seconds)
+4. **Pitch Calibration**: Maximum bicep contraction (5 seconds)
+5. **Roll Calibration**: Maximum tricep contraction (5 seconds)
+
+### Signal Quality Monitoring
+- **Real-time SNR calculation** for each EMG channel
+- **Cross-talk detection** between muscle groups
+- **Fatigue monitoring** through signal degradation analysis
+- **Control accuracy assessment** based on intended vs actual response
+
+## Research Data Collection
+
+The platform automatically logs comprehensive data for analysis:
+
+### EMG Data (`data_output/emg_data/`)
+- Raw EMG signals from all 4 channels
+- Processed EMG signals after filtering
+- Signal-to-noise ratio measurements
+- Control accuracy metrics
+- Fatigue indicators
+
+### Flight Performance Data (`data_output/debug_logs/`)
+- Real-time flight parameters (speed, altitude, position)
+- Control inputs (throttle, yaw, pitch, roll)
+- System response characteristics
+- Session timestamps and duration
+
+### Evaluation Reports (`data_output/reports/`)
+- Session summary with key metrics
+- Signal quality assessment
+- Control accuracy analysis
+- Performance benchmarks
+- Statistical analysis ready format
+
+## Flight Physics and Characteristics
+
+### Research-Optimized Flight Model
+- **Physics**: Realistic 6-DOF flight dynamics
+- **Control Response**: Low-latency EMG to flight command mapping
+- **Flight Envelope**: Full 3D maneuverability with ground collision detection
+- **Performance**: Speeds up to 180 km/h with precise altitude control
+- **Environment**: Simplified for focus on control validation
+
+## Safety Considerations
+
+### EMG Safety
 - Use only medical-grade, skin-safe electrodes
 - Replace electrodes after each session or when adhesion degrades
 - Stop immediately if skin irritation occurs
 - Clean electrode sites with alcohol after removal
 
-#### Signal Quality Assurance
-- Maintain electrode impedance below 10kΩ (check with multimeter if available)
-- Monitor for 50/60Hz noise pickup (indicates poor grounding or interference)
+### Electrical Safety
+- Use only USB-powered Arduino (isolated from mains power)
+- Verify BioAmp EXG Pill is designed for human EMG measurement
+- Do not modify circuit connections while electrodes are attached
+- Disconnect electrodes before making any hardware changes
+
+### Signal Quality Assurance
+- Maintain electrode impedance below 10kΩ
+- Monitor for 50/60Hz noise pickup
 - Verify muscle activation produces clear, repeatable EMG signals
 - Document baseline and maximum signal levels for each session
 
-### 3. Image Assets
-Create an `images/` folder and add the required PNG files:
-- **sky_background.png** (1200x800px) - Sky/landscape background
-- **ground_texture.png** (tileable texture) - Ground surface pattern
-- **building.png** (variable size) - Building obstacle texture
-- **checkpoint.png** (64x64px) - Target waypoint icon
-- **hud_overlay.png** (optional) - Instrument panel graphics
+## Performance Metrics & Validation
 
-*Note: Simulator includes fallback graphics if images are missing*
+### EMG Signal Quality Metrics
+- **Signal-to-Noise Ratio**: >20dB for reliable control
+- **Response Latency**: <100ms from muscle activation to flight response
+- **Control Accuracy**: ±5% deviation from intended control input
+- **Cross-talk Rejection**: <10% interference between channels
 
-### 4. Hardware Configuration
-In `main.py`, configure hardware settings:
-```python
-# Set to True when Arduino is connected
-ARDUINO_MODE = False  # Change to True for hardware mode
+### Flight Performance Benchmarks
+- **Navigation Accuracy**: >90% accuracy within training scenarios
+- **Control Precision**: Stable flight path maintenance
+- **System Response**: Consistent EMG-to-flight control mapping
+- **Fatigue Resistance**: <20% performance degradation in 30-minute sessions
 
-# Arduino connection settings
-arduino_port = 'COM3'    # Update for your system
-baud_rate = 115200
-emg_threshold = 30.0     # Adjust based on signal strength
-emg_max = 100.0         # Maximum expected EMG amplitude
-```
+## Research Applications
 
-## Running the Simulator
+### Potential Studies
+1. **System Characterization**: EMG signal quality and control precision measurement
+2. **Response Latency Analysis**: Time from muscle activation to flight response
+3. **Signal Processing Optimization**: Filter design and noise reduction effectiveness
+4. **Control Mapping Evaluation**: Different EMG-to-command mapping strategies
+5. **Hardware Validation**: Component performance and reliability testing
+6. **User Training Protocols**: Learning curve analysis and skill acquisition
+7. **Fatigue Analysis**: Muscle fatigue effects on control performance
+8. **Accessibility Research**: Alternative control methods for motor impairments
 
-### Testing Mode (No Hardware)
-```bash
-python main.py
-```
-- **Controls**: WASD (pitch/roll), Space (throttle), QE (yaw), R (reset)
-- **View**: First-person perspective from FPV drone cockpit
-- **Flight Mode**: Single FPV racing drone configuration
+### Experimental Protocol Recommendations
 
-### Hardware Mode (With EMG)
-1. Connect Arduino with EMG sensors
-2. Set `ARDUINO_MODE = True` in main.py
-3. Update `arduino_port` if needed
-4. Run simulator: `python main.py`
-5. Use first-person FPV racing drone view with EMG muscle control
-6. Calibrate EMG thresholds based on your muscle signals
+#### Participant Requirements
+- **Age Range**: 18-65 years
+- **Health Status**: No known neuromuscular disorders
+- **Experience Level**: Mixed (novice to experienced operators)
+- **Sample Size**: Minimum 20 participants for statistical significance
 
-## Drone Flight Characteristics
-
-### FPV Racing Drone Configuration
-- **Flight Model**: Omnidirectional movement with hover capability and high-speed forward flight
-- **Maneuverability**: Acrobatic flight capabilities with immediate response to control inputs
-- **Control Response**: Sensitive, direct thrust vectoring with low latency
-- **First-Person View**: Racing drone cockpit with high-refresh stabilized camera
-- **Applications**: Racing competitions, aerial photography, inspection, emergency response
-- **Flight Envelope**: Full 3D flight capability including inverted flight and rapid direction changes
-
-## Training Scenarios
-
-### High-Speed Navigation Course
-- **Objective**: Navigate efficiently through waypoints using first-person perspective at high speed
-- **View**: FPV racing cockpit with navigation instruments and target indicators
-- **Time Limit**: 90 seconds
-- **Speed Challenge**: Navigate at speeds up to 90 km/h while maintaining precision
-- **Focus**: High-speed flight control, obstacle avoidance, precision navigation
-- **Skills**: Split-second decision making, high-speed maneuvering, instrument flying
-
-### Precision Agility Course  
-- **Objective**: Execute complex flight patterns through tight spaces using cockpit view
-- **View**: High-refresh FPV camera with racing-style HUD elements
-- **Time Limit**: 60 seconds
-- **Maneuver Challenge**: Perform rapid direction changes, loops, and precision flying
-- **Focus**: Agility, control precision, spatial awareness through first-person control
-- **Skills**: Acrobatic maneuvering, reaction time, fine motor control precision
-
-## Research Data Collection
-
-The simulator logs performance metrics for research analysis:
-- **EMG Signal Strength**: Real-time muscle activation levels displayed in FPV cockpit HUD
-- **Flight Performance**: Speed (km/h), altitude, trajectory tracking from first-person perspective
-- **Navigation Accuracy**: Target acquisition and waypoint navigation precision at high speeds
-- **Control Precision**: Crosshair accuracy and flight path stability during high-speed flight
-- **System Response**: EMG-to-flight control latency measurement during dynamic maneuvers
-
-## Safety Considerations
-
-- **EMG Safety**: Use only body-safe electrodes and proper skin preparation
-- **Signal Quality**: Ensure good electrode contact for reliable control
-- **Muscle Fatigue**: Take breaks to prevent overexertion
-- **Calibration**: Regularly recalibrate EMG thresholds for consistent performance
+#### Study Design
+1. **Baseline Assessment**: Traditional control method performance
+2. **EMG Calibration**: Individual muscle activation mapping
+3. **Training Phase**: 5 sessions, 30 minutes each, over 2 weeks
+4. **Performance Testing**: Standardized scenarios for comparison
+5. **Follow-up**: Retention testing after 1-week interval
 
 ## Troubleshooting
 
 ### Common Issues
 
 **No Arduino Connection**:
-- Verify COM port in Device Manager
-- Check USB cable and Arduino power
+- Verify COM port in Device Manager (Windows) or `ls /dev/tty*` (Linux)
+- Check USB cable and Arduino power LED
 - Ensure correct baud rate (115200)
+- Try different USB port
 
 **Poor EMG Signal Quality**:
-- Clean skin with alcohol before electrode placement
+- Re-clean skin with alcohol, ensure completely dry
 - Check electrode contact and positioning
-- Adjust `emg_threshold` and `emg_max` values
 - Replace electrodes if signal is noisy
+- Verify cable connections to BioAmp inputs
+- Ensure proper muscle contraction technique
 
-**Missing Images**:
-- Verify all PNG files exist in `images/` folder
-- Check file names match exactly (case-sensitive)
-- Simulator will use fallback graphics if images missing
+**Platform Crashes or Errors**:
+- Check Python dependencies installation
+- Verify all required files are present
+- Review console output for specific error messages
+- Ensure sufficient system resources available
 
-## Research Applications
+## Advanced Features
 
-### Potential Studies
-1. **System Characterization**: EMG signal quality and control precision measurement
-2. **Response Latency Analysis**: Time from muscle activation to drone response
-3. **Signal Processing Optimization**: Filter design and noise reduction effectiveness
-4. **Control Mapping Evaluation**: Different EMG-to-command mapping strategies
-5. **Hardware Validation**: Component performance and reliability testing
+### Signal Processing Pipeline
+- **Band-pass filtering**: 74.5-149.5 Hz for EMG signals
+- **Envelope detection**: Moving average with 128-sample buffer
+- **Noise threshold**: Configurable minimum activation level
+- **Adaptive calibration**: Real-time adjustment to user characteristics
 
-### Data Export
-- Modify `main.py` to log performance data to CSV files
-- Export EMG signal data for offline analysis
-- Record system performance metrics for technical validation
-
+### Data Analysis Tools
+- **Real-time monitoring**: Live EMG signal visualization
+- **Performance metrics**: Automated calculation of key indicators
+- **Export capabilities**: CSV and JSON formats for external analysis
+- **Statistical analysis**: Built-in correlation and trend analysis
 
 ## Contributing
 
 This is an open-source research platform. Contributions welcome:
-- Additional drone flight models
-- New training scenarios  
-- Enhanced EMG signal processing
-- Improved calibration algorithms
-- Data analysis tools
-
+- Enhanced EMG signal processing algorithms
+- Additional flight physics models
+- Improved calibration procedures
+- Data analysis and visualization tools
+- Documentation improvements
+- Bug reports and feature requests
 
 ## References
 
@@ -383,148 +414,10 @@ This is an open-source research platform. Contributions welcome:
 - Arduino Uno R4 Specifications: [Arduino Official](https://docs.arduino.cc/)
 - Pygame Documentation: [pygame.org](https://www.pygame.org/docs/)
 
-## Performance Metrics & Validation
+## License
 
-### EMG Signal Quality Metrics
-- **Signal-to-Noise Ratio**: >20dB for reliable control
-- **Response Latency**: <100ms from muscle activation to drone response
-- **Control Accuracy**: ±5% deviation from intended control input
-- **Cross-talk Rejection**: <10% interference between channels
+This research platform is intended for academic and educational purposes. Always follow proper safety protocols when using EMG equipment and conducting human subjects research. Obtain appropriate institutional review board (IRB) approval for studies involving human participants.
 
-### Flight Performance Benchmarks
-- **Shahed 136 Mode**: Completion rate >80% for navigation missions
-- **FPV Racing Mode**: Average lap times competitive with keyboard controls
-- **Collision Avoidance**: <15% obstacle collision rate after training
-- **Target Acquisition**: >90% accuracy within training scenarios
+## Support
 
-### Training Effectiveness Measures
-- **Learning Curve**: 50% improvement in completion time over 10 sessions
-- **Skill Retention**: Performance maintained after 1-week break
-- **Fatigue Resistance**: <20% performance degradation in 30-minute sessions
-- **Adaptability**: Successful control transfer between drone types
-
-## Experimental Protocols
-
-### Study Design Recommendations
-
-#### Participant Requirements
-- **Age Range**: 18-65 years
-- **Health Status**: No known neuromuscular disorders
-- **Experience Level**: Mixed (novice to experienced drone operators)
-- **Sample Size**: Minimum 20 participants for statistical significance
-
-#### Training Protocol
-1. **Baseline Assessment**: Traditional joystick control performance
-2. **EMG Calibration**: Individual muscle activation mapping
-3. **Training Phase**: 5 sessions, 30 minutes each, over 2 weeks
-4. **Performance Testing**: Standardized scenarios for both control methods
-5. **Follow-up**: Retention testing after 1-week interval
-
-#### Data Collection Points
-- **Pre-training**: Demographics, experience, baseline performance
-- **Each Session**: EMG signals, flight paths, completion times, errors
-- **Post-training**: Performance comparison, user experience surveys
-- **Follow-up**: Skill retention, preference feedback
-
-### Statistical Analysis Framework
-- **Primary Outcomes**: Task completion time, accuracy measures
-- **Secondary Outcomes**: Learning curves, user satisfaction, fatigue measures
-- **Analysis Methods**: Repeated measures ANOVA, regression analysis
-- **Effect Size**: Cohen's d for meaningful difference detection
-
-## Advanced Features
-
-### Signal Processing Enhancements
-```python
-# Example EMG preprocessing pipeline
-def advanced_emg_processing(raw_signal):
-    # Notch filter for 50/60Hz noise removal
-    filtered = notch_filter(raw_signal, 50)
-    
-    # Adaptive threshold based on recent history
-    threshold = adaptive_threshold(filtered, window_size=500)
-    
-    # Fatigue compensation
-    compensated = fatigue_compensation(filtered, session_time)
-    
-    return compensated
-```
-
-### Machine Learning Integration
-- **Pattern Recognition**: Classify different muscle activation patterns
-- **Adaptive Calibration**: Automatically adjust to user's EMG characteristics  
-- **Predictive Control**: Anticipate user intentions based on EMG trends
-- **Anomaly Detection**: Identify signal artifacts or electrode displacement
-
-### Extended Scenarios
-```python
-# Additional training scenarios
-def create_search_rescue_scenario():
-    """Search and rescue mission with multiple objectives"""
-    return TrainingScenario(
-        "Search & Rescue Mission",
-        "Locate and mark survivor positions in disaster zone",
-        obstacles=disaster_debris(),
-        targets=survivor_locations(),
-        time_limit=180
-    )
-
-def create_formation_flight():
-    """Multi-drone coordination scenario"""
-    return TrainingScenario(
-        "Formation Flight Training", 
-        "Maintain formation with AI wingmen",
-        obstacles=dynamic_obstacles(),
-        targets=formation_waypoints(),
-        time_limit=120
-    )
-```
-
-## Data Visualization & Analysis
-
-### Real-time Monitoring Dashboard
-- **EMG Signal Plots**: Live waveform display with frequency analysis
-- **Flight Path Tracking**: 3D trajectory visualization
-- **Performance Metrics**: Real-time KPI dashboard
-- **Fatigue Indicators**: Muscle activation trend analysis
-
-### Post-Session Analysis Tools
-```python
-# Example analysis functions
-def analyze_learning_curve(session_data):
-    """Calculate learning rate and performance trends"""
-    completion_times = [s['completion_time'] for s in session_data]
-    return np.polyfit(range(len(completion_times)), completion_times, 1)
-
-def emg_fatigue_analysis(emg_data, timestamps):
-    """Analyze muscle fatigue over session duration"""
-    median_frequency = calculate_median_frequency(emg_data)
-    return correlation(median_frequency, timestamps)
-```
-
-## Applications & Impact
-
-### Research Domains
-- **Biomedical Engineering**: Muscle signal acquisition and processing
-- **Control Systems**: Human-machine interface development
-- **Signal Processing**: EMG filtering and feature extraction
-- **Hardware Design**: Low-cost biosensor integration
-- **Computer Graphics**: Real-time simulation and visualization
-
-### Technical Applications
-- **FPV Flight Training**: Immersive first-person drone piloting experience
-- **Alternative Control Systems**: Hands-free cockpit operation
-- **Flight Simulation**: Realistic pilot perspective with EMG integration
-- **Educational Platforms**: Bioengineering demonstration through flight simulation
-- **Research Equipment**: Standardized EMG-flight control testbed
-- **Prototype Development**: Proof-of-concept for muscle-controlled vehicle interfaces
-
-### Social Impact
-- **Educational Value**: STEM learning through bioengineering applications
-- **Open Source Hardware**: Accessible platform for EMG research
-- **Technical Innovation**: Demonstration of low-cost biosensor integration
-- **Research Advancement**: Standardized platform for EMG control studies
-
----
-
-**Disclaimer**: This research platform is intended for academic and educational purposes. Always follow proper safety protocols when using EMG equipment and conducting human subjects research. Obtain appropriate institutional review board (IRB) approval for studies involving human participants.
+For technical support, bug reports, or research collaboration inquiries, please refer to the project documentation or contact the development team through the appropriate academic channels.
