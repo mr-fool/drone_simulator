@@ -57,7 +57,17 @@ class DebugConfig:
         else:
             print("Debug mode: OFF - Full simulation active")
 
-
+    @classmethod
+    def print_research_status(cls):
+        """Print research configuration status"""
+        print("=== EMG RESEARCH MODE ===")
+        print("BioAmp EXG Pill + Arduino Uno R4")
+        print("Focus: EMG signal validation and flight control")
+        print("Environment: Empty (obstacles removed)")
+        print("Challenges: Ground collision, navigation, battery management")
+        print("Data Collection: EMG signals + flight performance")
+        print("=============================")
+        
 class PhysicsConfig:
     """Physics tuning constants - easy to modify for testing"""
     
@@ -77,3 +87,36 @@ class PhysicsConfig:
     
     # Ground collision altitude (world Y coordinate)
     GROUND_COLLISION_Y = 590  # Crash when Y >= this value
+
+class EMGConfig:
+    """EMG-specific configuration for BioAmp EXG Pill"""
+    
+    # === HARDWARE SETTINGS ===
+    ARDUINO_PORT = 'COM3'            # Update for your system
+    BAUD_RATE = 115200               # BioAmp EXG Pill standard rate
+    SAMPLE_RATE = 500                # Hz - Arduino sampling rate
+    
+    # === EMG PROCESSING ===
+    NOISE_THRESHOLD = 25             # Minimum signal for intentional control
+    EMG_MAX_VALUE = 100              # Maximum expected EMG amplitude
+    CALIBRATION_SAMPLES = 1000       # Samples for baseline calibration
+    
+    # === CHANNEL MAPPING ===
+    # BioAmp EXG Pill 4-channel configuration
+    THROTTLE_CHANNEL = 0             # A0 - Forearm flexor
+    YAW_CHANNEL = 1                  # A1 - Forearm extensor  
+    PITCH_CHANNEL = 2                # A2 - Bicep brachii
+    ROLL_CHANNEL = 3                 # A3 - Tricep brachii
+    
+    # === SIGNAL QUALITY METRICS ===
+    MIN_SNR_DB = 20                  # Minimum signal-to-noise ratio
+    MAX_CROSSTALK_PERCENT = 10       # Maximum inter-channel interference
+    TARGET_RESPONSE_MS = 100         # Target system response time
+    
+    # === EVALUATION CRITERIA ===
+    CONTROL_ACCURACY_TARGET = 95     # Target control accuracy percentage
+    FATIGUE_THRESHOLD_PERCENT = 20   # Maximum acceptable performance degradation
+    
+    # === DISPLAY SETTINGS ===
+    SHOW_EMG_SIGNALS = True          # Show real-time EMG values
+    SHOW_SIGNAL_QUALITY = True       # Show SNR and signal quality metrics

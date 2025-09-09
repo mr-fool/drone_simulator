@@ -1,6 +1,7 @@
 import pygame
 import math
 import time
+from vector3 import Vector3
 
 class FPVHUDSystem:
     def __init__(self, screen_width, screen_height):
