@@ -318,19 +318,18 @@ The platform automatically logs comprehensive data for analysis:
 - Verify muscle activation produces clear, repeatable EMG signals
 - Document baseline and maximum signal levels for each session
 
-## Performance Metrics & Validation
+## Target Performance Metrics (To Be Validated)
 
-### EMG Signal Quality Metrics
-- **Signal-to-Noise Ratio**: >20dB for reliable control
-- **Response Latency**: <100ms from muscle activation to flight response
-- **Control Accuracy**: ±5% deviation from intended control input
-- **Cross-talk Rejection**: <10% interference between channels
+### Proposed EMG Signal Quality Targets
+- **Signal-to-Noise Ratio**: Target >20dB for reliable control
+- **Response Latency**: Target <100ms from muscle activation to drone response
+- **Control Accuracy**: Target ±5% deviation from intended control input
+- **Cross-talk Rejection**: Target <10% interference between channels
 
-### Flight Performance Benchmarks
-- **Navigation Accuracy**: >90% accuracy within training scenarios
-- **Control Precision**: Stable flight path maintenance
-- **System Response**: Consistent EMG-to-flight control mapping
-- **Fatigue Resistance**: <20% performance degradation in 30-minute sessions
+### Expected Flight Performance Benchmarks
+- **Navigation Missions**: Target >80% completion rate
+- **Speed Performance**: Target speeds up to 180 km/h demonstrated
+- **Training Effectiveness**: Target 50% improvement over training sessions
 
 ## Research Applications
 
