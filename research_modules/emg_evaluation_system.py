@@ -77,18 +77,35 @@ class EMGEvaluationSystem:
         
         print(f"EMG evaluation logging started: {filename}")
     
-    def update_emg_signals(self, raw_signals):
+    def update_emg_signals(self, raw_signals, arduino_connected=False):
         """
         Update EMG signals and perform real-time analysis
         raw_signals: [throttle, yaw, pitch, roll] from Arduino
+        arduino_connected: True if real Arduino is connected
         """
+        # Store Arduino connection status
+        self.arduino_connected = arduino_connected
+        
+        # Only process real EMG data if Arduino is actually connected
+        if not arduino_connected:
+            # Reset evaluation results to indicate no hardware
+            self.evaluation_results = {
+                'signal_quality': 'No Hardware',
+                'control_accuracy': 0.0,
+                'response_latency': 0.0,
+                'fatigue_level': 0.0,
+                'overall_score': 0.0
+            }
+            return
+        
+        # Existing EMG processing code only runs with real hardware
         channels = ['throttle', 'yaw', 'pitch', 'roll']
         
         for i, channel in enumerate(channels):
             if i < len(raw_signals):
                 self.signal_history[channel].append(raw_signals[i])
         
-        # Calculate real-time metrics
+        # Calculate real-time metrics only for real EMG data
         self.calculate_snr()
         self.calculate_crosstalk()
         
@@ -282,70 +299,61 @@ class EMGEvaluationSystem:
         return processed
     
     def draw_evaluation_hud(self, screen, x=10, y=10):
-        """Draw EMG evaluation HUD overlay"""
-        # Background panel
-        panel_width = 300
-        panel_height = 400
+        """Draw EMG evaluation HUD overlay - repositioned to avoid gauge overlap"""
+        
+        # Only show if Arduino is connected
+        if not hasattr(self, 'arduino_connected') or not self.arduino_connected:
+            return
+        
+        # MOVED POSITION: Place at top-right instead of top-left to avoid gauge overlap
+        panel_width = 280  # Reduced width
+        panel_height = 350  # Reduced height
+        
+        # Position at top-right corner, avoiding other HUD elements
+        panel_x = screen.get_width() - panel_width - 10
+        panel_y = 10
+        
         panel_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
         panel_surface.fill((0, 0, 0, 180))
-        screen.blit(panel_surface, (x, y))
+        screen.blit(panel_surface, (panel_x, panel_y))
         
         # Title
-        title = self.font_large.render("EMG Evaluation", True, self.WHITE)
-        screen.blit(title, (x + 10, y + 10))
+        title = self.font_medium.render("EMG Monitor", True, self.WHITE)  # Shorter title
+        screen.blit(title, (panel_x + 10, panel_y + 10))
         
-        current_y = y + 45
+        current_y = panel_y + 35
         
         # Signal Quality
         quality = self.evaluate_signal_quality()
         quality_color = self.GREEN if quality == "Excellent" else self.YELLOW if quality in ["Good", "Fair"] else self.RED
-        quality_text = self.font_medium.render(f"Signal Quality: {quality}", True, quality_color)
-        screen.blit(quality_text, (x + 10, current_y))
-        current_y += 25
-        
-        # SNR Values
-        snr_text = self.font_small.render("Signal-to-Noise Ratio (dB):", True, self.WHITE)
-        screen.blit(snr_text, (x + 10, current_y))
+        quality_text = self.font_small.render(f"Quality: {quality}", True, quality_color)
+        screen.blit(quality_text, (panel_x + 10, current_y))
         current_y += 20
+        
+        # Compact SNR display
+        snr_text = self.font_small.render("SNR (dB):", True, self.WHITE)
+        screen.blit(snr_text, (panel_x + 10, current_y))
+        current_y += 18
         
         for channel in ['throttle', 'yaw', 'pitch', 'roll']:
             snr = self.snr_values[channel]
             snr_color = self.GREEN if snr > 20 else self.YELLOW if snr > 15 else self.RED
-            snr_display = self.font_small.render(f"  {channel}: {snr:.1f} dB", True, snr_color)
-            screen.blit(snr_display, (x + 20, current_y))
-            current_y += 18
+            short_name = channel[:3].upper()  # Shortened channel names
+            snr_display = self.font_small.render(f"{short_name}: {snr:.1f}", True, snr_color)
+            screen.blit(snr_display, (panel_x + 15, current_y))
+            current_y += 16
         
-        # Control Accuracy
+        # Compact metrics
         accuracy = self.evaluation_results['control_accuracy']
         acc_color = self.GREEN if accuracy > 90 else self.YELLOW if accuracy > 75 else self.RED
-        acc_text = self.font_medium.render(f"Control Accuracy: {accuracy:.1f}%", True, acc_color)
-        screen.blit(acc_text, (x + 10, current_y))
-        current_y += 25
-        
-        # Fatigue Level
-        fatigue = self.evaluation_results['fatigue_level']
-        fatigue_color = self.GREEN if fatigue < 20 else self.YELLOW if fatigue < 40 else self.RED
-        fatigue_text = self.font_medium.render(f"Fatigue Level: {fatigue:.1f}%", True, fatigue_color)
-        screen.blit(fatigue_text, (x + 10, current_y))
-        current_y += 25
-        
-        # Real-time EMG values
-        emg_title = self.font_small.render("Real-time EMG:", True, self.WHITE)
-        screen.blit(emg_title, (x + 10, current_y))
+        acc_text = self.font_small.render(f"Accuracy: {accuracy:.1f}%", True, acc_color)
+        screen.blit(acc_text, (panel_x + 10, current_y))
         current_y += 20
         
-        for channel in ['throttle', 'yaw', 'pitch', 'roll']:
-            if self.signal_history[channel]:
-                current_value = self.signal_history[channel][-1]
-                emg_display = self.font_small.render(f"  {channel}: {current_value:.1f}", True, self.BLUE)
-                screen.blit(emg_display, (x + 20, current_y))
-                current_y += 18
-        
-        # Calibration status
-        cal_status = "Complete" if self.calibration_complete else "Required"
-        cal_color = self.GREEN if self.calibration_complete else self.RED
-        cal_text = self.font_medium.render(f"Calibration: {cal_status}", True, cal_color)
-        screen.blit(cal_text, (x + 10, current_y))
+        fatigue = self.evaluation_results['fatigue_level']
+        fatigue_color = self.GREEN if fatigue < 20 else self.YELLOW if fatigue < 40 else self.RED
+        fatigue_text = self.font_small.render(f"Fatigue: {fatigue:.1f}%", True, fatigue_color)
+        screen.blit(fatigue_text, (panel_x + 10, current_y))
     
     def generate_evaluation_report(self):
         """Generate comprehensive evaluation report"""

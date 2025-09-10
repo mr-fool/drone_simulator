@@ -20,7 +20,7 @@ from vector3 import Vector3
 from drone import FPVDrone
 from physics_manager import physics_manager, collision_manager
 from research_obstacles import ResearchRenderer, RESEARCH_SCENARIOS, Target
-from config import DebugConfig, PhysicsConfig, EMGConfig
+from config import DebugConfig, PhysicsConfig, EMGConfig, UIConfig
 from research_config_ui import ResearchConfigurationUI
 from emg_evaluation_system import EMGEvaluationSystem
 from emg_calibration_ui import EMGCalibrationUI
@@ -272,9 +272,11 @@ class FPVSimulator:
             print("Starting EMG research flight session...")
 
     def process_emg_controls(self):
-        """Enhanced EMG processing with research evaluation"""
+        """Enhanced EMG processing with proper hardware detection"""
         if ARDUINO_MODE:
-            self.emg_evaluation.update_emg_signals(emg_signals)
+            # Pass Arduino connection status to EMG evaluation
+            self.emg_evaluation.arduino_connected = True
+            self.emg_evaluation.update_emg_signals(emg_signals, arduino_connected=True)
             processed_signals = self.emg_evaluation.process_signals(emg_signals)
             throttle, yaw, pitch, roll = processed_signals
             
@@ -289,30 +291,29 @@ class FPVSimulator:
             
             return throttle, yaw, pitch, roll
         else:
-            # Keyboard controls with EMG simulation for testing
+            # Keyboard controls - don't process fake EMG data
+            self.emg_evaluation.arduino_connected = False
             keys = pygame.key.get_pressed()
-            throttle = 1.0 if (keys[pygame.K_SPACE] and not self.drone.crashed) else 0.0
+            
+            # FIXED: Reduce keyboard throttle from 1.0 to 0.3 for gradual response
+            throttle = 0.3 if (keys[pygame.K_SPACE] and not self.drone.crashed) else 0.0
             yaw = (-0.5 if keys[pygame.K_q] else 0.0) + (0.5 if keys[pygame.K_e] else 0.0)
             pitch = (0.5 if keys[pygame.K_w] else 0.0) + (-0.5 if keys[pygame.K_s] else 0.0)
             roll = (-0.5 if keys[pygame.K_a] else 0.0) + (0.5 if keys[pygame.K_d] else 0.0)
             
-            # Simulate EMG signals for research testing
-            test_signals = [
-                throttle * 80 + random.uniform(10, 20),
-                (yaw + 1) * 40 + random.uniform(5, 15),
-                (pitch + 1) * 40 + random.uniform(5, 15), 
-                (roll + 1) * 40 + random.uniform(5, 15)
-            ]
-            self.emg_evaluation.update_emg_signals(test_signals)
-            
+            # Don't simulate fake EMG signals when no Arduino
             return throttle, yaw, pitch, roll
 
-    def project_3d_to_fpv(self, world_pos):
+    def project_3d_to_fpv(self, world_pos, drone_position=None, drone_rotation=None):
         """Use unified projection from physics manager"""
+        # Use provided parameters or default to current drone position/rotation
+        camera_pos = drone_position if drone_position is not None else self.drone.position
+        camera_rot = drone_rotation if drone_rotation is not None else self.drone.rotation
+        
         return self.physics.project_3d_to_screen(
             world_pos, 
-            self.drone.position, 
-            self.drone.rotation
+            camera_pos, 
+            camera_rot
         )
 
     def check_ground_collision(self):
@@ -372,7 +373,7 @@ class FPVSimulator:
             self.research_renderer.draw_target(
                 self.screen, 
                 target, 
-                self.project_3d_to_fpv,
+                self.project_3d_to_fpv,  # Use the original method
                 self.drone.position,
                 self.drone.rotation
             )
@@ -487,8 +488,10 @@ class FPVSimulator:
                 self.log_research_data(throttle, yaw, pitch, roll)
                 
                 if self.check_ground_collision():
-                    self.drone.crashed = True
-                    print(f"Ground collision at {self.drone.get_speed_kmh():.0f} km/h")
+                     if not self.drone.crashed:  # Only crash once
+                        self.drone.crashed = True
+                        self.drone.velocity = Vector3(0, 0, 0)  # Stop all movement
+                        print(f"GROUND COLLISION at {self.drone.get_speed_kmh():.0f} km/h")
                 
                 if not DebugConfig.DISABLE_TARGETS:
                     collected_target = self.check_fpv_target_collection()
@@ -511,7 +514,7 @@ class FPVSimulator:
                 
                 self.draw_hud()
                 
-                if EMGConfig.SHOW_EMG_SIGNALS:
+                if EMGConfig.SHOW_EMG_SIGNALS and ARDUINO_MODE:
                     self.emg_evaluation.draw_evaluation_hud(self.screen, 10, 10)
                 
                 self.draw_debug_info()

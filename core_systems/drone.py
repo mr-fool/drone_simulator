@@ -55,13 +55,16 @@ class FPVDrone:
         
         # FIXED: Throttle provides powerful upward thrust for racing performance
         if throttle > 0:
-            # Much more powerful thrust system
-            thrust_force = throttle * self.thrust_power * self.dt * 60
+            # FIXED: Much more gradual and realistic throttle response
+            base_thrust = 0.25  # Reduced from much higher value
+            thrust_force = throttle * base_thrust * self.dt * 60
+            
+            # Gradual upward acceleration instead of instant launch
             self.velocity.y -= thrust_force  # Upward thrust
             
-            # ADDED: Forward momentum from throttle (like real racing drones)
+            # FIXED: Reduced forward momentum from throttle
             heading_rad = math.radians(self.rotation.y)
-            forward_thrust = throttle * 0.8 * self.dt * 60  # Forward acceleration
+            forward_thrust = throttle * 0.05 * self.dt * 60  # Much reduced from 0.8
             self.velocity.x += math.sin(heading_rad) * forward_thrust
             self.velocity.z += math.cos(heading_rad) * forward_thrust
         

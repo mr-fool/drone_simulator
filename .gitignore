@@ -1,2 +1,29 @@
-__pycache__/fpv_hud_system.cpython-313.pyc
+# Python cache files
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Research data output
+data_output/
+*.txt
+*.csv
+*.json
+
+# Specific report patterns
+research_debug_*.txt
+emg_evaluation_*.csv
+emg_research_report_*.json
+
+# Log files
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

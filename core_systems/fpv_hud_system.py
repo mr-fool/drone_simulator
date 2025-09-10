@@ -76,7 +76,7 @@ class FPVHUDSystem:
         screen.blit(heading_text, heading_rect)
 
     def draw_artificial_horizon(self, screen, pitch, roll):
-        """Draw artificial horizon - shows actual drone orientation with proper circular clipping"""
+        """Draw artificial horizon with FIXED altitude-based horizon calculation"""
         center_x, center_y = self.attitude_center
         size = self.attitude_size
         
@@ -84,44 +84,39 @@ class FPVHUDSystem:
         horizon_surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
         
         # Fill entire surface with sky first
-        pygame.draw.circle(horizon_surface, self.BLUE, (size, size), size)  # sky color
-
-        # Calculate horizon line position based on pitch
-        horizon_y = size + (pitch * 3)  # Negative because up pitch should show more sky
-
-        # Draw ground portion BELOW horizon line (from horizon_y to bottom)
+        pygame.draw.circle(horizon_surface, self.BLUE, (size, size), size)
+        
+        # FIXED: Proper horizon calculation based on pitch only (not altitude)
+        # Pitch should determine horizon position regardless of altitude
+        horizon_y = size - (pitch * 2)  # Fixed: proper pitch-to-horizon mapping
+        
+        # Ensure horizon line stays within reasonable bounds
+        horizon_y = max(size * 0.1, min(size * 1.9, horizon_y))
+        
+        # Draw ground portion BELOW horizon line
         for x in range(size * 2):
-            for y in range(int(horizon_y), size * 2):  # Changed: from horizon_y to bottom
+            for y in range(int(horizon_y), size * 2):
                 # Check if this pixel is within the circle
                 dist = math.sqrt((x - size) ** 2 + (y - size) ** 2)
                 if dist <= size:
-                    horizon_surface.set_at((x, y), self.BROWN)  # ground color
+                    horizon_surface.set_at((x, y), self.BROWN)
         
         # Draw horizon line
-        pygame.draw.line(horizon_surface, self.WHITE, (0, horizon_y), (size * 2, horizon_y), 3)
+        pygame.draw.line(horizon_surface, self.WHITE, (0, horizon_y), (size * 2, horizon_y), 2)
         
-        # Apply roll rotation to the entire horizon
+        # Apply roll rotation (existing code remains the same)
         if abs(roll) > 0.1:
-            # Rotate the horizon surface
             rotated_surface = pygame.transform.rotate(horizon_surface, roll)
-            
-            # Get the center of the rotated surface
             rotated_rect = rotated_surface.get_rect()
-            
-            # Calculate offset to center the rotated surface
             offset_x = center_x - rotated_rect.width // 2
             offset_y = center_y - rotated_rect.height // 2
             
-            # Create a clipping mask to ensure we only draw within the original circle
             temp_surface = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
             
-            # Extract only the circular portion from the rotated surface
             for x in range(size * 2):
                 for y in range(size * 2):
-                    # Check if this pixel should be within our target circle
                     dist = math.sqrt((x - size) ** 2 + (y - size) ** 2)
                     if dist <= size:
-                        # Calculate where this pixel comes from in the rotated surface
                         src_x = x + (rotated_rect.width // 2 - size)
                         src_y = y + (rotated_rect.height // 2 - size)
                         
@@ -130,37 +125,33 @@ class FPVHUDSystem:
                             pixel_color = rotated_surface.get_at((src_x, src_y))
                             temp_surface.set_at((x, y), pixel_color)
             
-            # Blit the clipped surface
             screen.blit(temp_surface, (center_x - size, center_y - size))
         else:
-            # No rotation - blit directly
             screen.blit(horizon_surface, (center_x - size, center_y - size))
         
-        # Draw white circle frame
+        # Draw white circle frame and aircraft symbol (existing code)
         pygame.draw.circle(screen, self.WHITE, (center_x, center_y), size, 3)
-        
-        # Aircraft symbol (fixed in center - represents your drone)
         pygame.draw.line(screen, self.YELLOW, (center_x - 20, center_y), (center_x + 20, center_y), 4)
         pygame.draw.line(screen, self.YELLOW, (center_x, center_y - 5), (center_x, center_y + 5), 4)
-        
+    
     def draw_speed_indicator(self, screen, current_speed, max_speed):
         """Draw vertical speed tape"""
         x, y = self.speed_pos
         tape_height = 200
         tape_width = 60
-        
+            
         # Speed tape background
         pygame.draw.rect(screen, (0, 0, 0, 180), (x, y, tape_width, tape_height))
         pygame.draw.rect(screen, self.WHITE, (x, y, tape_width, tape_height), 2)
-        
+            
         # Speed markings
         speed_range = 100
         center_y = y + tape_height // 2
-        
-        for speed in range(max(0, int(current_speed) - speed_range//2), 
-                          int(current_speed) + speed_range//2, 10):
-            mark_y = center_y - (speed - current_speed) * 2
             
+        for speed in range(max(0, int(current_speed) - speed_range//2), 
+                        int(current_speed) + speed_range//2, 10):
+            mark_y = center_y - (speed - current_speed) * 2
+                
             if y <= mark_y <= y + tape_height:
                 if speed % 20 == 0:
                     pygame.draw.line(screen, self.WHITE, (x + tape_width - 15, mark_y), (x + tape_width, mark_y), 2)
@@ -168,14 +159,14 @@ class FPVHUDSystem:
                     screen.blit(speed_text, (x + 5, mark_y - 8))
                 else:
                     pygame.draw.line(screen, self.GRAY, (x + tape_width - 8, mark_y), (x + tape_width, mark_y), 1)
-        
-        # Current speed indicator
+            
+            # Current speed indicator
         pygame.draw.polygon(screen, self.YELLOW, [
             (x + tape_width, center_y - 8),
             (x + tape_width + 15, center_y),
             (x + tape_width, center_y + 8)
         ])
-        
+            
         # Speed readout
         speed_text = self.font_medium.render(f"{current_speed:.0f}", True, self.YELLOW)
         speed_bg = pygame.Rect(x + tape_width + 20, center_y - 15, 60, 30)
